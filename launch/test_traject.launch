@@ -1,0 +1,14 @@
+<launch>
+  <node pkg="motoman_sia5f_teleop" type="test_traject" name="test_traject"
+        output="screen">
+    <rosparam>
+      rate: 10
+    </rosparam>
+  </node>
+  <node pkg="motoman_sia5f_teleop" type="moveit_interface"
+        name="moveit_interface" output="screen">
+    <rosparam>
+      rate: 10
+    </rosparam>
+  </node>
+</launch>

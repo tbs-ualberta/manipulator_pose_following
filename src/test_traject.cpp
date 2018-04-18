@@ -1,46 +1,53 @@
 
-#include <moveit/move_group_interface/move_group_interface.h>
+#include <cmath>
 #include <ros/ros.h>
+#include <geometry_msgs/Pose.h>
+
+#define _USE_MATH_DEFINES
 
 int main(int argc, char **argv) {
+
   ros::init(argc, argv, "test_traject");
   ros::NodeHandle node_handle;
-  ros::AsyncSpinner spinner(1);
-  spinner.start();
 
-  static const std::string PLANNING_GROUP = "manipulator";
-  moveit::planning_interface::MoveGroupInterface move_group(PLANNING_GROUP);
-  // We can print the name of the reference frame for this robot.
-  ROS_INFO("Reference frame: %s", move_group.getPlanningFrame().c_str());
+  ros::Publisher pub_pose =
+      node_handle.advertise<geometry_msgs::Pose>("pose", 1);
 
-  // We can also print the name of the end-effector link for this group.
-  ROS_INFO("End effector link: %s", move_group.getEndEffectorLink().c_str());
+  // --- Obtain parameters ---
+  int rate_hz = 10;
+  node_handle.getParam("test_traject/rate", rate_hz);
+  ros::Rate loop_rate(rate_hz);
 
-  // Planning to a Pose goal
-  // ^^^^^^^^^^^^^^^^^^^^^^^
-  // We can plan a motion for this group to a desired pose for the
-  // end-effector.
-  geometry_msgs::Pose target_pose1;
-  target_pose1.orientation.x = 0;
-  target_pose1.orientation.y = 0.7;
-  target_pose1.orientation.z = 0;
-  target_pose1.orientation.w = 0;
-  target_pose1.position.x = 0.5;
-  target_pose1.position.y = 0.1;
-  target_pose1.position.z = 0.45;
-  move_group.setPoseTarget(target_pose1);
+  geometry_msgs::Pose pose_init;
+  pose_init.orientation.x = 0;
+  pose_init.orientation.y = 0;
+  pose_init.orientation.z = 0;
+  pose_init.orientation.w = 1;
+  pose_init.position.x = 0.489;
+  pose_init.position.y = 0;
+  pose_init.position.z = 0.64;
 
-  // Now, we call the planner to compute the plan and visualize it.
-  // Note that we are just planning, not asking move_group
-  // to actually move the robot.
-  moveit::planning_interface::MoveGroupInterface::Plan my_plan;
+  ros::Time t_init_abs = ros::Time::now();
+  double t_init_abs_d = (double)t_init_abs.sec + (double)t_init_abs.nsec * 1e-9;
+  double pos_ref[3];
+  double t_period = 5;
+  double amp = 0.05;
+  while (ros::ok()) {
+    ros::Time t_now_abs = ros::Time::now();
+    double t_now_abs_d = (double)t_now_abs.sec + (double)t_now_abs.nsec * 1e-9;
+    double t_now_d = t_now_abs_d - t_init_abs_d;
 
-  bool success = (move_group.plan(my_plan) ==
-                  moveit::planning_interface::MoveItErrorCode::SUCCESS);
+    pos_ref[0] = amp * sin(2 * M_PI * t_now_d / t_period);
+    pos_ref[1] = amp * cos(2 * M_PI * t_now_d / t_period) - amp;
 
-  ROS_INFO("Visualizing plan 1 (pose goal) %s", success ? "" : "FAILED");
+    geometry_msgs::Pose pose_ref;
+    pose_ref.orientation = pose_init.orientation;
+    pose_ref.position.x = pose_init.position.x;
+    pose_ref.position.y = pose_init.position.y + pos_ref[0];
+    pose_ref.position.z = pose_init.position.z + pos_ref[1];
 
-  if (success) {
-    move_group.execute(my_plan);
+    pub_pose.publish(pose_ref);
+
+    loop_rate.sleep();
   }
 }
