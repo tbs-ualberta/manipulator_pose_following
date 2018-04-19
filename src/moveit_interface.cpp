@@ -27,9 +27,13 @@ void callbackPose(const geometry_msgs::Pose::ConstPtr &msg) {
 bool callbackMoveHome(motoman_sia5f_teleop::MoveHome::Request &req,
                       motoman_sia5f_teleop::MoveHome::Response &res) {
 
+  // FIXME Velocity and acceleration limit does not seem to be working
+  //       (changing it does not seem to have any effect on the robot's speed)
   moveit::planning_interface::MoveGroupInterface move_group(PLANNING_GROUP);
   move_group.setMaxVelocityScalingFactor(req.max_vel_fact);
   move_group.setMaxAccelerationScalingFactor(req.max_acc_fact);
+  ROS_INFO("Max velocity scaling factor: %1.1f", req.max_vel_fact);
+  ROS_INFO("Max acceleration scaling factor: %1.1f", req.max_acc_fact);
 
   std::vector<double> joint_angles = {0, 0, 0, 0, 0, 0, 0};
   move_group.setJointValueTarget(joint_angles);
