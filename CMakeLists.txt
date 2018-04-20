@@ -11,6 +11,7 @@ find_package(catkin REQUIRED COMPONENTS
   roscpp
   moveit_core
   moveit_ros_planning_interface
+  geometry_msgs
   message_generation
 )
 
@@ -58,6 +59,9 @@ find_package(catkin REQUIRED COMPONENTS
 add_service_files(
   FILES
   MoveHome.srv
+  MoveToRPY.srv
+  MoveToQuat.srv
+  StartTeleop.srv
 )
 
 ## Generate actions in the 'action' folder

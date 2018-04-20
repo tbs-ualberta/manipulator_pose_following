@@ -1,0 +1,5 @@
+float32[] pose_quat
+float32   max_vel_fact
+float32   max_acc_fact
+---
+int32 reply
