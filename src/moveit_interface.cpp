@@ -1,14 +1,4 @@
 
-// TODO Implement a subscriber to a topic "pose" for continuous streaming of
-//      poses. This is for instance intended for teleoperation.
-
-// TODO Implement a service for planning and execution of one particular pose
-//      (move_to) for instance for moving the end-effector to an initial pose
-//      before starting the pose stream for teleoperation
-
-// TODO Implement a service that starts a teleoperation loop (start_teleop).
-//      The service is to be called after the service 'move_to'.
-
 #include <moveit/move_group_interface/move_group_interface.h>
 #include <ros/callback_queue.h>
 #include <ros/ros.h>
@@ -18,18 +8,12 @@
 #include "manipulator_teleop/MoveHome.h"
 #include "manipulator_teleop/MoveToQuat.h"
 #include "manipulator_teleop/MoveToRPY.h"
-#include "manipulator_teleop/StartTeleop.h"
+
 #include <vector>
 
 static const std::string PLANNING_GROUP = "manipulator";
 geometry_msgs::Pose g_pose_ref;
-bool g_do_teleop = false;
 
-void callbackPose(const geometry_msgs::Pose::ConstPtr &msg) {
-  // TODO Make sure that the duration for planning is limited to the sampling
-  //      rate.
-  g_pose_ref = *msg;
-}
 
 bool callbackMoveHome(manipulator_teleop::MoveHome::Request &req,
                       manipulator_teleop::MoveHome::Response &res) {
@@ -147,72 +131,52 @@ bool callbackMoveToQuat(manipulator_teleop::MoveToQuat::Request &req,
   }
 }
 
-bool callbackStartTeleop(manipulator_teleop::StartTeleop::Request &req,
-                         manipulator_teleop::StartTeleop::Response &res) {
-
-  g_do_teleop = true;
-  res.reply = 0;
-  return 0;
-}
-
 int main(int argc, char **argv) {
 
   // --- Initializations
   ros::init(argc, argv, "moveit_interface");
 
   // --- Setup node handles for
-  //     - teleoperation callbacks
   //     - move_home and move_to service callbacks
-  //     - teleop_start and teleop_stop callbacks
-  ros::NodeHandle nh_teleop;
   ros::NodeHandle nh_move;
-  ros::NodeHandle nh_startstop;
 
   // --- Setup custom callback queues for
-  //     - move_home service callbacks
-  //     - teleop_start and teleop_stop callbacks
+  //     - move_home and move_to service callbacks
   ros::CallbackQueue queue_move;
   nh_move.setCallbackQueue(&queue_move);
-  ros::CallbackQueue queue_startstop;
-  nh_startstop.setCallbackQueue(&queue_startstop);
 
   // --- Start an AsyncSpinner with two threads for
-  //     - trajectory planning and execution and
-  //     - calls to service 'move_home'.
-  ros::AsyncSpinner spin_move_home(1, &queue_move);
-  spin_move_home.start();
-  ros::AsyncSpinner spin_startstop(1, &queue_startstop);
-  spin_startstop.start();
+  //     - calls to service 'move_home' and
+  //     - trajectory planning and execution (moveit_group needs its own async
+  //       spinner)
+  ros::AsyncSpinner spin_move(1, &queue_move);
+  spin_move.start();
   ros::AsyncSpinner spin_plan(1);
   spin_plan.start();
 
   moveit::planning_interface::MoveGroupInterface move_group(PLANNING_GROUP);
 
-  // --- Setup topic subscritions
-  ros::Subscriber sub_pose = nh_teleop.subscribe("pose", 1, callbackPose);
-
   // --- Advertise services
   //     - move_home
   //     - move_to
-  //     - start_teleop
   ros::ServiceServer srv_move_home =
       nh_move.advertiseService("/moveit_interface/move_home", callbackMoveHome);
   ros::ServiceServer srv_move_to_rpy = nh_move.advertiseService(
       "/moveit_interface/move_to_rpy", callbackMoveToRPY);
   ros::ServiceServer srv_move_to_quat = nh_move.advertiseService(
       "/moveit_interface/move_to_quat", callbackMoveToQuat);
-  ros::ServiceServer srv_start = nh_startstop.advertiseService(
-      "/moveit_interface/start_teleop", callbackStartTeleop);
 
   // --- Obtain parameters
   int rate_hz = 10;
-  nh_teleop.getParam("moveit_interface/rate", rate_hz);
+  nh_move.getParam("moveit_interface/rate", rate_hz);
   ros::Rate loop_rate(rate_hz);
-  move_group.setPlanningTime(1.0 / (double)rate_hz -
-                             1.0 / (2 * (double)rate_hz));
+  //move_group.setPlanningTime(1.0 / (double)rate_hz -
+  //                           1.0 / (2 * (double)rate_hz));
 
+  //ros::spin();
   while (ros::ok()) {
-
+    //ros::spinOnce();
+  /*
     if (g_do_teleop) {
       ros::spinOnce();
 
@@ -229,5 +193,7 @@ int main(int argc, char **argv) {
 
     // Loop until user aborts (Ctrl+C)
     loop_rate.sleep();
+    */
   }
+
 }

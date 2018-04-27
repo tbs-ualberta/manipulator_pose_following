@@ -9,6 +9,7 @@ add_compile_options(-std=c++11)
 ## is used, also find other catkin packages
 find_package(catkin REQUIRED COMPONENTS
   roscpp
+  moveit_ros_manipulation
   moveit_core
   moveit_ros_planning_interface
   geometry_msgs
@@ -49,11 +50,10 @@ find_package(catkin REQUIRED COMPONENTS
 ##   * add every package in MSG_DEP_SET to generate_messages(DEPENDENCIES ...)
 
 ## Generate messages in the 'msg' folder
-# add_message_files(
-#   FILES
-#   Message1.msg
-#   Message2.msg
-# )
+add_message_files(
+ FILES
+ DeltaPoseRPY.msg
+)
 
 ## Generate services in the 'srv' folder
 add_service_files(
@@ -61,7 +61,7 @@ add_service_files(
   MoveHome.srv
   MoveToRPY.srv
   MoveToQuat.srv
-  StartTeleop.srv
+  StartStopTeleop.srv
 )
 
 ## Generate actions in the 'action' folder
@@ -113,6 +113,7 @@ catkin_package(
     roscpp
     moveit_core
     moveit_ros_planning_interface
+    moveit_ros_manipulation
 #  DEPENDS system_lib
 )
 
@@ -142,6 +143,8 @@ include_directories(
 ## The recommended prefix ensures that target names across packages don't collide
 add_executable(test_traject src/test_traject.cpp)
 add_executable(moveit_interface src/moveit_interface.cpp)
+add_executable(teleop src/teleop.cpp)
+add_executable(keyboard_teleop src/keyboard_teleop.cpp)
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
@@ -159,6 +162,13 @@ target_link_libraries(test_traject
 )
 target_link_libraries(moveit_interface
   ${catkin_LIBRARIES}
+)
+target_link_libraries(teleop
+  ${catkin_LIBRARIES}
+)
+target_link_libraries(keyboard_teleop
+  ${catkin_LIBRARIES}
+  ncurses
 )
 
 #############
