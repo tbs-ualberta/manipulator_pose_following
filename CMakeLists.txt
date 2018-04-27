@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 2.8.3)
-project(motoman_sia5f_teleop)
+project(manipulator_teleop)
 
 ## Compile as C++11, supported in ROS Kinetic and newer
 add_compile_options(-std=c++11)
@@ -108,7 +108,7 @@ generate_messages(
 ## DEPENDS: system dependencies of this project that dependent projects also need
 catkin_package(
 #  INCLUDE_DIRS include
-#  LIBRARIES motoman_sia5f_teleop
+#  LIBRARIES manipulator_teleop
   CATKIN_DEPENDS
     roscpp
     moveit_core
@@ -129,7 +129,7 @@ include_directories(
 
 ## Declare a C++ library
 # add_library(${PROJECT_NAME}
-#   src/${PROJECT_NAME}/motoman_sia5f_teleop.cpp
+#   src/${PROJECT_NAME}/manipulator_teleop.cpp
 # )
 
 ## Add cmake target dependencies of the library

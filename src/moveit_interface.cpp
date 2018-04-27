@@ -15,10 +15,10 @@
 
 #include <tf/tf.h>
 
-#include "motoman_sia5f_teleop/MoveHome.h"
-#include "motoman_sia5f_teleop/MoveToQuat.h"
-#include "motoman_sia5f_teleop/MoveToRPY.h"
-#include "motoman_sia5f_teleop/StartTeleop.h"
+#include "manipulator_teleop/MoveHome.h"
+#include "manipulator_teleop/MoveToQuat.h"
+#include "manipulator_teleop/MoveToRPY.h"
+#include "manipulator_teleop/StartTeleop.h"
 #include <vector>
 
 static const std::string PLANNING_GROUP = "manipulator";
@@ -31,8 +31,8 @@ void callbackPose(const geometry_msgs::Pose::ConstPtr &msg) {
   g_pose_ref = *msg;
 }
 
-bool callbackMoveHome(motoman_sia5f_teleop::MoveHome::Request &req,
-                      motoman_sia5f_teleop::MoveHome::Response &res) {
+bool callbackMoveHome(manipulator_teleop::MoveHome::Request &req,
+                      manipulator_teleop::MoveHome::Response &res) {
 
   // FIXME Velocity and acceleration limit does not seem to be working
   //       (changing it does not seem to have any effect on the robot's speed)
@@ -61,8 +61,8 @@ bool callbackMoveHome(motoman_sia5f_teleop::MoveHome::Request &req,
   }
 }
 
-bool callbackMoveToRPY(motoman_sia5f_teleop::MoveToRPY::Request &req,
-                       motoman_sia5f_teleop::MoveToRPY::Response &res) {
+bool callbackMoveToRPY(manipulator_teleop::MoveToRPY::Request &req,
+                       manipulator_teleop::MoveToRPY::Response &res) {
 
   moveit::planning_interface::MoveGroupInterface move_group(PLANNING_GROUP);
   ROS_INFO("Max velocity scaling factor: %1.1f", req.max_vel_fact);
@@ -109,8 +109,8 @@ bool callbackMoveToRPY(motoman_sia5f_teleop::MoveToRPY::Request &req,
   }
 }
 
-bool callbackMoveToQuat(motoman_sia5f_teleop::MoveToQuat::Request &req,
-                        motoman_sia5f_teleop::MoveToQuat::Response &res) {
+bool callbackMoveToQuat(manipulator_teleop::MoveToQuat::Request &req,
+                        manipulator_teleop::MoveToQuat::Response &res) {
 
   moveit::planning_interface::MoveGroupInterface move_group(PLANNING_GROUP);
   ROS_INFO("Max velocity scaling factor: %1.1f", req.max_vel_fact);
@@ -147,8 +147,8 @@ bool callbackMoveToQuat(motoman_sia5f_teleop::MoveToQuat::Request &req,
   }
 }
 
-bool callbackStartTeleop(motoman_sia5f_teleop::StartTeleop::Request &req,
-                         motoman_sia5f_teleop::StartTeleop::Response &res) {
+bool callbackStartTeleop(manipulator_teleop::StartTeleop::Request &req,
+                         manipulator_teleop::StartTeleop::Response &res) {
 
   g_do_teleop = true;
   res.reply = 0;
