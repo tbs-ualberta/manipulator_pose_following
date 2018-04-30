@@ -108,10 +108,10 @@ int main(int argc, char **argv) {
   // --- Advertise services
   //     - start_teleop
   //     - stop_teleop
-  ros::ServiceServer srv_start = nh_startstop.advertiseService(
-      "/moveit_interface/start_teleop", cb_start_teleop);
-  ros::ServiceServer srv_stop = nh_startstop.advertiseService(
-      "/moveit_interface/stop_teleop", cb_stop_teleop);
+  ros::ServiceServer srv_start = nh_teleop.advertiseService(
+      "/teleop/start", cb_start_teleop);
+  ros::ServiceServer srv_stop = nh_teleop.advertiseService(
+      "/teleop/stop", cb_stop_teleop);
 
   // --- Obtain parameters
   int rate_hz = 10;
@@ -122,10 +122,13 @@ int main(int argc, char **argv) {
   nh_teleop.getParam("teleop/group", group_st);
 
   // --- Setup MoveIt interface
+  ROS_DEBUG("Setting up MoveGroupInterface...");
   moveit::planning_interface::MoveGroupInterface arm(group_st);
+  ROS_DEBUG("Done!");
 
   // ---------------------------------------------------------------------------
 
+  ROS_DEBUG("Setting up teleoperation...");
   double dt = 0.1;
   double move_timeout = 2.0;
   jogging_velocity = 0.4;
@@ -209,9 +212,17 @@ int main(int argc, char **argv) {
   time_last = ros::Time::now();
   g_delta_pose.delta_pose_rpy.resize(6,0);
 
+  ROS_DEBUG("Done!");
+
   // ---------------------------------------------------------------------------
 
-  while (ros::ok()) {
+teleop:
+  ROS_INFO("Waiting for teleoperation start signal...");
+  while(!g_do_teleop){
+    ros::spinOnce();
+  }
+
+  while (ros::ok() && g_do_teleop) {
     /*
     if (g_do_teleop) {
       ros::spinOnce();
@@ -326,7 +337,7 @@ int main(int argc, char **argv) {
     //d_theta = d_theta_tmp;
     ROS_DEBUG_STREAM_ONCE("J: \n" << J);
     ROS_DEBUG_STREAM_NAMED("stream_d_theta", "d_theta: \n" << d_theta);
-    ROS_DEBUG_STREAM_NAMED("stream_d_theta", "d_X: \n" << d_X);
+    ROS_DEBUG_STREAM_NAMED("stream_d_X", "d_X: \n" << d_X);
 
     //check condition number:
     jacobian_condition = J.norm()*invert(J).norm();
@@ -356,10 +367,14 @@ int main(int argc, char **argv) {
     streaming_pub.publish(dummy_traj);
     ros::Duration(0.01).sleep();
 
+    // FIXME This is a blocking call that should be avoided in the future
     ros::spinOnce();
 
     //--------------------------------------------------------------------------
   }
-  ros::shutdown();
+  if (ros::ok()){
+    goto teleop;
+  }
+  //ros::shutdown();
   return 1;
 }
