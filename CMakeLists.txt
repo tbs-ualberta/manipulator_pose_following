@@ -62,6 +62,7 @@ add_service_files(
   MoveToRPY.srv
   MoveToQuat.srv
   StartStopTeleop.srv
+  SetVelocity.srv
 )
 
 ## Generate actions in the 'action' folder

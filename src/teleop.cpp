@@ -1,7 +1,4 @@
 
-// TODO Implement a service that starts teleoperation (start_teleop).
-// TODO Implement a service that stops teleoperation (stop_teleop).
-
 #include <moveit/move_group_interface/move_group_interface.h>
 #include <moveit/robot_model/robot_model.h>
 #include <moveit/robot_model_loader/robot_model_loader.h>
@@ -10,26 +7,21 @@
 #include <ros/ros.h>
 
 #include "manipulator_teleop/DeltaPoseRPY.h"
+#include "manipulator_teleop/SetVelocity.h"
 #include "manipulator_teleop/StartStopTeleop.h"
 
 // --- Globals
-// TODO Remove global variables if not necessary
 bool g_do_teleop = false;
-sensor_msgs::JointState current_joints;
-std::map<std::string, int> joint_name_map;
-moveit::core::RobotStatePtr kinematic_state;
-trajectory_msgs::JointTrajectory dummy_traj;
-trajectory_msgs::JointTrajectoryPoint point;
-const moveit::core::JointModelGroup *joint_model_group;
-ros::Time start_time, time_last, last_callback;
-// TODO Make below message a stamped one
-manipulator_teleop::DeltaPoseRPY g_delta_pose;
-double jogging_velocity;
-double max_translation_acc, translation_acc;
-double max_rotation_acc, rotation_acc;
+double g_jogging_velocity;
+double g_max_translat_acc, g_translat_acc;
+double g_max_rot_acc, g_rot_acc;
 const int STATE_IDLE = 0;
 const int STATE_TELEOP = 1;
 int g_state = STATE_IDLE;
+sensor_msgs::JointState g_current_joints;
+ros::Time g_t_start, g_t_last, g_t_last_cb;
+// TODO Make below message a stamped one
+manipulator_teleop::DeltaPoseRPY g_delta_pose;
 
 Eigen::MatrixXd invert(Eigen::MatrixXd J) {
   // TODO Test jacobian condition and conditionally add "damping"
@@ -37,7 +29,7 @@ Eigen::MatrixXd invert(Eigen::MatrixXd J) {
   return (J.transpose() * (J * J.transpose() + .0000001 * I).inverse());
 }
 
-void cb_joint_state(sensor_msgs::JointState msg) { current_joints = msg; }
+void cb_joint_state(sensor_msgs::JointState msg) { g_current_joints = msg; }
 
 bool cb_start_teleop(manipulator_teleop::StartStopTeleop::Request &req,
                      manipulator_teleop::StartStopTeleop::Response &res) {
@@ -61,7 +53,7 @@ bool cb_stop_teleop(manipulator_teleop::StartStopTeleop::Request &req,
 
 void cb_delta_pose_rpy(const manipulator_teleop::DeltaPoseRPY::ConstPtr &msg) {
 
-  last_callback = ros::Time::now();
+  g_t_last_cb = ros::Time::now();
   // Check valid deltas:
   if (msg->delta_pose_rpy.size() != 6) {
     ROS_ERROR("Delta pose must be of size 6 (position, orientation (RPY)). "
@@ -69,13 +61,29 @@ void cb_delta_pose_rpy(const manipulator_teleop::DeltaPoseRPY::ConstPtr &msg) {
     return;
   }
   // TODO make 'DeltaPoseRPY' a stamped message (header) to merge the timestamp
-  //      last_callback into it.
+  //      g_t_last_cb into it.
   g_delta_pose = *msg;
   ROS_DEBUG_NAMED(
       "stream_dpose", "new_deltas = [%1.1f %1.1f %1.1f %1.1f %1.1f %1.1f]",
       g_delta_pose.delta_pose_rpy.at(0), g_delta_pose.delta_pose_rpy.at(1),
       g_delta_pose.delta_pose_rpy.at(2), g_delta_pose.delta_pose_rpy.at(3),
       g_delta_pose.delta_pose_rpy.at(4), g_delta_pose.delta_pose_rpy.at(5));
+}
+
+bool cb_set_vel(manipulator_teleop::SetVelocity::Request &req,
+                manipulator_teleop::SetVelocity::Response &res) {
+
+  if (req.velocity < 0 || req.velocity > 1.0) {
+    ROS_WARN(
+        "Invalid jogging velocity requested. Value must be on interval [0,1].");
+    res.result = false;
+  } else {
+    g_jogging_velocity = req.velocity;
+    g_translat_acc = req.velocity * g_max_translat_acc;
+    g_rot_acc = req.velocity * g_max_rot_acc;
+    res.result = true;
+  }
+  return res.result;
 }
 
 int main(int argc, char **argv) {
@@ -111,12 +119,15 @@ int main(int argc, char **argv) {
       nh_teleop.subscribe("joint_states", 1, cb_joint_state);
 
   // --- Advertise services
-  //     - start_teleop
-  //     - stop_teleop
+  //     - start: Changes state to STATE_TELEOP
+  //     - stop: Changes state to STATE_IDLE
+  //     - set_velocity: Sets the jogging velocity factor
   ros::ServiceServer srv_start =
       nh_teleop.advertiseService("/teleop/start", cb_start_teleop);
   ros::ServiceServer srv_stop =
       nh_teleop.advertiseService("/teleop/stop", cb_stop_teleop);
+  ros::ServiceServer srv_set_velocity =
+      nh_teleop.advertiseService("/teleop/set_velocity", cb_set_vel);
 
   // --- Obtain parameters
   int rate_hz = 10;
@@ -134,19 +145,22 @@ int main(int argc, char **argv) {
   // ---------------------------------------------------------------------------
 
   ROS_DEBUG("Setting up teleoperation...");
+  // TODO Many of these parameters should be set on the parameter server, not
+  //      hard coded. Especially the loop sampling time should be enforced using
+  //      ros::rate.sleep().
   double dt = 0.1;
   double move_timeout = 2.0;
-  jogging_velocity = 0.4;
+  g_jogging_velocity = 0.4;
 
   double cart_translation_vel = .75;
-  max_translation_acc = .015;
-  translation_acc = max_translation_acc;
+  g_max_translat_acc = .015;
+  g_translat_acc = g_max_translat_acc;
   double k_translation = 0.1;
   double b_translation = 0.95;
 
   double cart_rotation_vel = 1.5;
-  max_rotation_acc = 0.05;
-  rotation_acc = max_rotation_acc;
+  g_max_rot_acc = 0.05;
+  g_rot_acc = g_max_rot_acc;
   double k_rotation = 0.1;
   double b_rotation = 0.95;
 
@@ -167,19 +181,15 @@ int main(int argc, char **argv) {
   robot_model::RobotModelPtr kinematic_model = model_loader.getModel();
   ROS_INFO("Model Frame: %s", kinematic_model->getModelFrame().c_str());
 
-  // kinematic_state = new moveit::core::RobotState(kinematic_model);
-  // kinematic_state = std::shared_ptr<moveit::core::RobotState>(
-  //    new moveit::core::RobotState(kinematic_model));
   moveit::core::RobotState kinematic_state(kinematic_model);
-  // kinematic_state = boost::shared_ptr<moveit::core::RobotState>(new
-  // moveit::core::RobotState(kinematic_model));
   kinematic_state.setToDefaultValues();
-  joint_model_group = kinematic_model->getJointModelGroup(group_st);
+  const moveit::core::JointModelGroup *joint_model_group_p;
+  joint_model_group_p = kinematic_model->getJointModelGroup(group_st);
 
   const std::vector<std::string> &joint_names =
-      joint_model_group->getJointModelNames();
+      joint_model_group_p->getJointModelNames();
   std::vector<double> joint_values;
-  kinematic_state.copyJointGroupPositions(joint_model_group, joint_values);
+  kinematic_state.copyJointGroupPositions(joint_model_group_p, joint_values);
   ros::topic::waitForMessage<sensor_msgs::JointState>("joint_states");
   ROS_DEBUG("joint_names: [%s %s %s %s %s %s %s]", joint_names[0].c_str(),
             joint_names[1].c_str(), joint_names[2].c_str(),
@@ -198,21 +208,23 @@ int main(int argc, char **argv) {
   std::ostream stream2(nullptr);
   std::stringbuf str2;
   stream2.rdbuf(&str2);
-  joint_model_group->printGroupInfo(stream2);
+  joint_model_group_p->printGroupInfo(stream2);
   ROS_DEBUG_STREAM("joint_model_group_info: " << str2.str());
 
   // Initialize jogging start.
-  dummy_traj.joint_names = current_joints.name;
+  trajectory_msgs::JointTrajectory dummy_traj;
+  dummy_traj.joint_names = g_current_joints.name;
+  trajectory_msgs::JointTrajectoryPoint point;
   for (unsigned int joint = 0; joint < 7; joint++) {
-    point.positions.push_back(current_joints.position.at(joint));
+    point.positions.push_back(g_current_joints.position.at(joint));
     point.velocities.push_back(0);
   }
   point.time_from_start = ros::Duration(0.0);
   dummy_traj.points.push_back(point);
   streaming_pub.publish(dummy_traj);
 
-  start_time = ros::Time::now();
-  time_last = ros::Time::now();
+  g_t_start = ros::Time::now();
+  g_t_last = ros::Time::now();
   g_delta_pose.delta_pose_rpy.resize(6, 0);
 
   ROS_DEBUG("Done!");
@@ -226,7 +238,7 @@ int main(int argc, char **argv) {
     case STATE_TELEOP:
       //------------------------------------------------------------------------
 
-      if ((ros::Time::now() - last_callback).toSec() > .1) {
+      if ((ros::Time::now() - g_t_last_cb).toSec() > .1) {
         for (unsigned int i = 0; i < 6; i++) {
           g_delta_pose.delta_pose_rpy.at(i) = 0.0;
         }
@@ -242,9 +254,9 @@ int main(int argc, char **argv) {
 
       // Time since last point:
       // ros::topic::waitForMessage<sensor_msgs::JointState>("joint_states");
-      dt = (ros::Time::now() - time_last).toSec();
-      time_last = ros::Time::now();
-      kinematic_state.setVariableValues(current_joints);
+      dt = (ros::Time::now() - g_t_last).toSec();
+      g_t_last = ros::Time::now();
+      kinematic_state.setVariableValues(g_current_joints);
 
       // Compute command velocity
       Eigen::VectorXd vel_command(6);
@@ -258,7 +270,7 @@ int main(int argc, char **argv) {
       for (unsigned int i = 0; i < 3; i++) {
         if (delta_mag > 0.0)
           vel_command[i] = g_delta_pose.delta_pose_rpy.at(i) / delta_mag *
-                           jogging_velocity * cart_translation_vel;
+                           g_jogging_velocity * cart_translation_vel;
         else
           vel_command[i] = 0.0;
       }
@@ -273,7 +285,7 @@ int main(int argc, char **argv) {
       for (unsigned int i = 3; i < 6; i++) {
         if (delta_mag > 0.0)
           vel_command[i] = g_delta_pose.delta_pose_rpy.at(i) / delta_mag *
-                           jogging_velocity * cart_rotation_vel;
+                           g_jogging_velocity * cart_rotation_vel;
         else
           vel_command[i] = 0.0;
       }
@@ -291,10 +303,10 @@ int main(int argc, char **argv) {
         cart_acc.setZero();
       } else {
         for (unsigned int i = 0; i < 3; i++) {
-          cart_acc[i] = vel_err.normalized()[i] * translation_acc / dt;
+          cart_acc[i] = vel_err.normalized()[i] * g_translat_acc / dt;
         }
         for (unsigned int i = 3; i < 6; i++) {
-          cart_acc[i] = vel_err.normalized()[i] * rotation_acc / dt;
+          cart_acc[i] = vel_err.normalized()[i] * g_rot_acc / dt;
         }
         cart_vel = (cart_vel + dt * cart_acc);
       }
@@ -317,8 +329,9 @@ int main(int argc, char **argv) {
 
       // Get the Jacobian
       kinematic_state.getJacobian(
-          joint_model_group, kinematic_state.getLinkModel(
-                                 joint_model_group->getLinkModelNames().back()),
+          joint_model_group_p,
+          kinematic_state.getLinkModel(
+              joint_model_group_p->getLinkModelNames().back()),
           ref_point, J);
       d_theta = invert(J) * d_X;
       // d_theta_tmp.setZero();
@@ -346,13 +359,15 @@ int main(int argc, char **argv) {
 
       // std::cout << "d_theta:\n" << d_theta << std::endl;
       for (unsigned int j = 0; j < 7; j++) {
-        // point.positions.at(j) = current_joints.position.at(j) + d_theta[j];
-        point.positions.at(j) = current_joints.position.at(j) + d_theta[j] * dt;
+        // point.positions.at(j) = g_current_joints.position.at(j) +
+        // d_theta[j];
+        point.positions.at(j) =
+            g_current_joints.position.at(j) + d_theta[j] * dt;
         // point.velocities.at(j) = d_theta[j]/dt;
         point.velocities.at(j) = d_theta[j];
       }
 
-      point.time_from_start = ros::Time::now() - start_time;
+      point.time_from_start = ros::Time::now() - g_t_start;
       dummy_traj.points.at(0) = point;
       streaming_pub.publish(dummy_traj);
       ros::Duration(0.01).sleep();
