@@ -7,14 +7,10 @@
 #include <ros/ros.h>
 
 #include "manipulator_teleop/DeltaPoseRPY.h"
-#include "manipulator_teleop/SetVelocity.h"
 #include "manipulator_teleop/StartStopTeleop.h"
 
 // --- Globals
 bool g_do_teleop = false;
-double g_jogging_velocity;
-double g_max_translat_acc, g_translat_acc;
-double g_max_rot_acc, g_rot_acc;
 const int STATE_IDLE = 0;
 const int STATE_TELEOP = 1;
 int g_state = STATE_IDLE;
@@ -55,7 +51,7 @@ void cb_delta_pose_rpy(const manipulator_teleop::DeltaPoseRPY::ConstPtr &msg) {
 
   g_t_last_cb = ros::Time::now();
   // Check valid deltas:
-  if (msg->delta_pose_rpy.size() != 6) {
+  if (msg->data.size() != 6) {
     ROS_ERROR("Delta pose must be of size 6 (position, orientation (RPY)). "
               "Ignoring message.");
     return;
@@ -63,27 +59,11 @@ void cb_delta_pose_rpy(const manipulator_teleop::DeltaPoseRPY::ConstPtr &msg) {
   // TODO make 'DeltaPoseRPY' a stamped message (header) to merge the timestamp
   //      g_t_last_cb into it.
   g_delta_pose = *msg;
-  ROS_DEBUG_NAMED(
-      "stream_dpose", "new_deltas = [%1.1f %1.1f %1.1f %1.1f %1.1f %1.1f]",
-      g_delta_pose.delta_pose_rpy.at(0), g_delta_pose.delta_pose_rpy.at(1),
-      g_delta_pose.delta_pose_rpy.at(2), g_delta_pose.delta_pose_rpy.at(3),
-      g_delta_pose.delta_pose_rpy.at(4), g_delta_pose.delta_pose_rpy.at(5));
-}
-
-bool cb_set_vel(manipulator_teleop::SetVelocity::Request &req,
-                manipulator_teleop::SetVelocity::Response &res) {
-
-  if (req.velocity < 0 || req.velocity > 1.0) {
-    ROS_WARN(
-        "Invalid jogging velocity requested. Value must be on interval [0,1].");
-    res.result = false;
-  } else {
-    g_jogging_velocity = req.velocity;
-    g_translat_acc = req.velocity * g_max_translat_acc;
-    g_rot_acc = req.velocity * g_max_rot_acc;
-    res.result = true;
-  }
-  return res.result;
+  /*ROS_DEBUG_NAMED("stream_dpose",
+                  "new_deltas = [%1.1f %1.1f %1.1f %1.1f %1.1f %1.1f]",
+                  g_delta_pose.data.at(0), g_delta_pose.data.at(1),
+                  g_delta_pose.data.at(2), g_delta_pose.data.at(3),
+                  g_delta_pose.data.at(4), g_delta_pose.data.at(5));*/
 }
 
 int main(int argc, char **argv) {
@@ -123,14 +103,12 @@ int main(int argc, char **argv) {
   //     - stop: Changes state to STATE_IDLE
   //     - set_velocity: Sets the jogging velocity factor
   ros::ServiceServer srv_start =
-      nh_teleop.advertiseService("/teleop/start", cb_start_teleop);
+      nh_startstop.advertiseService("/teleop/start", cb_start_teleop);
   ros::ServiceServer srv_stop =
       nh_teleop.advertiseService("/teleop/stop", cb_stop_teleop);
-  ros::ServiceServer srv_set_velocity =
-      nh_teleop.advertiseService("/teleop/set_velocity", cb_set_vel);
 
   // --- Obtain parameters
-  int rate_hz = 10;
+  int rate_hz = 100;
   nh_teleop.getParam("teleop/rate", rate_hz);
   ros::Rate loop_rate(rate_hz);
 
@@ -138,43 +116,21 @@ int main(int argc, char **argv) {
   nh_teleop.getParam("teleop/group", group_st);
 
   // --- Setup MoveIt interface
-  ROS_DEBUG("Setting up MoveGroupInterface...");
   moveit::planning_interface::MoveGroupInterface arm(group_st);
-  ROS_DEBUG("Done!");
 
   // ---------------------------------------------------------------------------
-
-  ROS_DEBUG("Setting up teleoperation...");
-  // TODO Many of these parameters should be set on the parameter server, not
-  //      hard coded. Especially the loop sampling time should be enforced using
-  //      ros::rate.sleep().
-  double dt = 0.1;
-  double move_timeout = 2.0;
-  g_jogging_velocity = 0.4;
-
-  double cart_translation_vel = .75;
-  g_max_translat_acc = .015;
-  g_translat_acc = g_max_translat_acc;
-  double k_translation = 0.1;
-  double b_translation = 0.95;
-
-  double cart_rotation_vel = 1.5;
-  g_max_rot_acc = 0.05;
-  g_rot_acc = g_max_rot_acc;
-  double k_rotation = 0.1;
-  double b_rotation = 0.95;
-
-  double jacobian_condition = 1.0;
-
-  Eigen::VectorXd d_X(6), d_theta(7), cart_acc(6), cart_vel(6), d_theta_tmp(7);
-  Eigen::VectorXd vel_err(6), err_dot(6);
+  //  KEEP HERE
+  // ---------------------------------------------------------------------------
   Eigen::MatrixXd J(6, 7);
+  Eigen::VectorXd d_X(6), d_theta(7), cart_vel(6);
   Eigen::Vector3d ref_point(0.0, 0.0, 0.0);
 
-  // initialize Cartesian delta vector;
-  cart_acc.setZero();
-  cart_vel.setZero();
   d_X.setZero();
+  cart_vel.setZero();
+  d_theta.setZero();
+  double dt = 0.1;
+  double jacobian_condition = 1;
+  g_delta_pose.data.resize(6, 0);
 
   // Get set up for kinematics:
   robot_model_loader::RobotModelLoader model_loader("robot_description");
@@ -221,13 +177,20 @@ int main(int argc, char **argv) {
   }
   point.time_from_start = ros::Duration(0.0);
   dummy_traj.points.push_back(point);
-  streaming_pub.publish(dummy_traj);
+  // ---------------------------------------------------------------------------
 
-  g_t_start = ros::Time::now();
-  g_t_last = ros::Time::now();
-  g_delta_pose.delta_pose_rpy.resize(6, 0);
+  // TODO Move code for computing desired velocity and acceleration between
+  //      following two lines to keyboard_teleop. This node will then receive
+  //      d_X. STATE_TELEOP will then begin with computing d_theta using the
+  //      d_X calculated in keyboard_teleop.
+  //      --> This way, the teleop node becomes more general and other nodes
+  //      are responsible for supplying smooth velocities and thus trajectories.
 
-  ROS_DEBUG("Done!");
+  // ---------------------------------------------------------------------------
+
+  // TODO Many of these parameters should be set on the parameter server, not
+  //      hard coded. Especially the loop sampling time should be enforced using
+  //      ros::rate.sleep().
 
   // ---------------------------------------------------------------------------
 
@@ -236,12 +199,23 @@ int main(int argc, char **argv) {
     case STATE_IDLE:
       break;
     case STATE_TELEOP:
-      //------------------------------------------------------------------------
 
+      //------------------------------------------------------------------------
+      // KEEP HERE
+      //------------------------------------------------------------------------
       if ((ros::Time::now() - g_t_last_cb).toSec() > .1) {
         for (unsigned int i = 0; i < 6; i++) {
-          g_delta_pose.delta_pose_rpy.at(i) = 0.0;
+          g_delta_pose.data.at(i) = 0.0;
         }
+      }
+      ROS_DEBUG_NAMED("stream_dpose",
+                "g_delta_pose.data: [%1.2f %1.2f %1.2f %1.2f %1.2f %1.2f]",
+                g_delta_pose.data[0], g_delta_pose.data[1],
+                g_delta_pose.data[2], g_delta_pose.data[3],
+                g_delta_pose.data[4], g_delta_pose.data[5]);
+
+      for (int i = 0; i < 6; i++) {
+        cart_vel[i] = g_delta_pose.data[i];
       }
 
       Eigen::Affine3d frame_tf = kinematic_state.getFrameTransform("link_t");
@@ -258,61 +232,7 @@ int main(int argc, char **argv) {
       g_t_last = ros::Time::now();
       kinematic_state.setVariableValues(g_current_joints);
 
-      // Compute command velocity
-      Eigen::VectorXd vel_command(6);
-      double sum_squares = 0;
-      for (unsigned int i = 0; i < 3; i++) {
-        sum_squares = sum_squares +
-                      g_delta_pose.delta_pose_rpy.at(i) *
-                          g_delta_pose.delta_pose_rpy.at(i);
-      }
-      double delta_mag = pow(sum_squares, 0.5);
-      for (unsigned int i = 0; i < 3; i++) {
-        if (delta_mag > 0.0)
-          vel_command[i] = g_delta_pose.delta_pose_rpy.at(i) / delta_mag *
-                           g_jogging_velocity * cart_translation_vel;
-        else
-          vel_command[i] = 0.0;
-      }
-
-      sum_squares = 0;
-      for (unsigned int i = 3; i < 6; i++) {
-        sum_squares = sum_squares +
-                      g_delta_pose.delta_pose_rpy.at(i) *
-                          g_delta_pose.delta_pose_rpy.at(i);
-      }
-      delta_mag = pow(sum_squares, 0.5);
-      for (unsigned int i = 3; i < 6; i++) {
-        if (delta_mag > 0.0)
-          vel_command[i] = g_delta_pose.delta_pose_rpy.at(i) / delta_mag *
-                           g_jogging_velocity * cart_rotation_vel;
-        else
-          vel_command[i] = 0.0;
-      }
-      // std::cout << "vel_command norm: " << vel_command.norm() << std::endl;
-      // Compute velocity error.
-      err_dot = 1 / dt * ((vel_command - cart_vel) - vel_err);
-      vel_err = vel_command - cart_vel;
-
-      double err_mag = vel_err.norm();
-      // std::cout << "vel_error norm: " << vel_err.squaredNorm() << std::endl;
-
-      // Compute acceleration
-      if (err_mag <= 0.015) {
-        cart_vel = vel_command;
-        cart_acc.setZero();
-      } else {
-        for (unsigned int i = 0; i < 3; i++) {
-          cart_acc[i] = vel_err.normalized()[i] * g_translat_acc / dt;
-        }
-        for (unsigned int i = 3; i < 6; i++) {
-          cart_acc[i] = vel_err.normalized()[i] * g_rot_acc / dt;
-        }
-        cart_vel = (cart_vel + dt * cart_acc);
-      }
-
-      if (cart_vel.norm() == 0)
-        cart_vel.setZero();
+      //------------------------------------------------------------------------
 
       // d_X = cart_vel*dt;
       d_X = cart_vel;
@@ -323,9 +243,6 @@ int main(int argc, char **argv) {
       // std::cout << "velocity:\n" << cart_vel << std::endl;
       // std::cout << "d_X:\n" << d_X << std::endl;
       // std::cout << "vel_err.norm: " << vel_err.norm() << std::endl;
-      ROS_DEBUG_NAMED("stream_cart", "accel: %1.2f", cart_acc[0]);
-      ROS_DEBUG_NAMED("stream_cart", "vel: %1.2f", cart_vel[0]);
-      ROS_DEBUG_NAMED("stream_cart", "err_dot: %1.2f", err_dot[0]);
 
       // Get the Jacobian
       kinematic_state.getJacobian(
@@ -333,10 +250,8 @@ int main(int argc, char **argv) {
           kinematic_state.getLinkModel(
               joint_model_group_p->getLinkModelNames().back()),
           ref_point, J);
+
       d_theta = invert(J) * d_X;
-      // d_theta_tmp.setZero();
-      // d_theta_tmp(0) = d_X(0);
-      // d_theta = d_theta_tmp;
       ROS_DEBUG_STREAM_ONCE("J: \n" << J);
       ROS_DEBUG_STREAM_NAMED("stream_d_theta", "d_theta: \n" << d_theta);
       ROS_DEBUG_STREAM_NAMED("stream_d_X", "d_X: \n" << d_X);
@@ -370,12 +285,12 @@ int main(int argc, char **argv) {
       point.time_from_start = ros::Time::now() - g_t_start;
       dummy_traj.points.at(0) = point;
       streaming_pub.publish(dummy_traj);
-      ros::Duration(0.01).sleep();
 
       //--------------------------------------------------------------------------
     } // end switch(g_state)
 
     // FIXME This is a blocking call that should be avoided in the future
+    loop_rate.sleep();
     ros::spinOnce();
   } // end while(ros::ok())
   return 1;
