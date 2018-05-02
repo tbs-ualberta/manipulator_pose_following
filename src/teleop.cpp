@@ -59,11 +59,6 @@ void cb_delta_pose_rpy(const manipulator_teleop::DeltaPoseRPY::ConstPtr &msg) {
   // TODO make 'DeltaPoseRPY' a stamped message (header) to merge the timestamp
   //      g_t_last_cb into it.
   g_delta_pose = *msg;
-  /*ROS_DEBUG_NAMED("stream_dpose",
-                  "new_deltas = [%1.1f %1.1f %1.1f %1.1f %1.1f %1.1f]",
-                  g_delta_pose.data.at(0), g_delta_pose.data.at(1),
-                  g_delta_pose.data.at(2), g_delta_pose.data.at(3),
-                  g_delta_pose.data.at(4), g_delta_pose.data.at(5));*/
 }
 
 int main(int argc, char **argv) {
@@ -73,6 +68,7 @@ int main(int argc, char **argv) {
 
   // --- Setup node handles for
   //     - teleoperation callbacks
+  //     - start and stop service callbacks
   ros::NodeHandle nh_teleop;
   ros::NodeHandle nh_startstop;
 
@@ -118,21 +114,17 @@ int main(int argc, char **argv) {
   // --- Setup MoveIt interface
   moveit::planning_interface::MoveGroupInterface arm(group_st);
 
-  // ---------------------------------------------------------------------------
-  //  KEEP HERE
-  // ---------------------------------------------------------------------------
   Eigen::MatrixXd J(6, 7);
-  Eigen::VectorXd d_X(6), d_theta(7), cart_vel(6);
+  Eigen::VectorXd theta_d(7), cart_vel(6);
   Eigen::Vector3d ref_point(0.0, 0.0, 0.0);
 
-  d_X.setZero();
   cart_vel.setZero();
-  d_theta.setZero();
+  theta_d.setZero();
   double dt = 0.1;
   double jacobian_condition = 1;
   g_delta_pose.data.resize(6, 0);
 
-  // Get set up for kinematics:
+  // --- Get set up for kinematics:
   robot_model_loader::RobotModelLoader model_loader("robot_description");
   robot_model::RobotModelPtr kinematic_model = model_loader.getModel();
   ROS_INFO("Model Frame: %s", kinematic_model->getModelFrame().c_str());
@@ -159,7 +151,6 @@ int main(int argc, char **argv) {
   std::stringbuf str;
   stream.rdbuf(&str);
   kinematic_state.printTransform(frame_tf, stream);
-  // std::cout << "transform: \n" << str.str() << endl;
   ROS_DEBUG_STREAM("transform: " << str.str());
   std::ostream stream2(nullptr);
   std::stringbuf str2;
@@ -167,7 +158,7 @@ int main(int argc, char **argv) {
   joint_model_group_p->printGroupInfo(stream2);
   ROS_DEBUG_STREAM("joint_model_group_info: " << str2.str());
 
-  // Initialize jogging start.
+  // --- Initialize jogging start
   trajectory_msgs::JointTrajectory dummy_traj;
   dummy_traj.joint_names = g_current_joints.name;
   trajectory_msgs::JointTrajectoryPoint point;
@@ -181,32 +172,12 @@ int main(int argc, char **argv) {
 
   g_t_start = ros::Time::now();
   g_t_last = ros::Time::now();
-  // ---------------------------------------------------------------------------
-
-  // TODO Move code for computing desired velocity and acceleration between
-  //      following two lines to keyboard_teleop. This node will then receive
-  //      d_X. STATE_TELEOP will then begin with computing d_theta using the
-  //      d_X calculated in keyboard_teleop.
-  //      --> This way, the teleop node becomes more general and other nodes
-  //      are responsible for supplying smooth velocities and thus trajectories.
-
-  // ---------------------------------------------------------------------------
-
-  // TODO Many of these parameters should be set on the parameter server, not
-  //      hard coded. Especially the loop sampling time should be enforced using
-  //      ros::rate.sleep().
-
-  // ---------------------------------------------------------------------------
 
   while (ros::ok()) {
     switch (g_state) {
-    case STATE_IDLE:
+    case STATE_IDLE:    // IDLE
       break;
-    case STATE_TELEOP:
-
-      //------------------------------------------------------------------------
-      // KEEP HERE
-      //------------------------------------------------------------------------
+    case STATE_TELEOP:  // TELEOP
       double dt_cb = (ros::Time::now() - g_t_last_cb).toSec();
       if (dt_cb > .5) {
         ROS_DEBUG_NAMED("stream_dbg", "dt_cb: %1.3f", dt_cb);
@@ -225,7 +196,7 @@ int main(int argc, char **argv) {
       stream.rdbuf(&str);
       kinematic_state.printTransform(frame_tf, stream);
       // std::cout << "transform: \n" << str.str() << endl;
-      ROS_DEBUG_STREAM_NAMED("stream_tf", "transform: " << str.str());
+      ROS_DEBUG_STREAM_NAMED("stream_pose", "EEF-pose: " << str.str());
 
       // Time since last point:
       // ros::topic::waitForMessage<sensor_msgs::JointState>("joint_states");
@@ -235,18 +206,6 @@ int main(int argc, char **argv) {
 
       ROS_DEBUG_STREAM_NAMED("stream_cart_vel", "cart_vel: \n" << cart_vel);
 
-      //------------------------------------------------------------------------
-
-      // d_X = cart_vel*dt;
-      d_X = cart_vel;
-      // std::cout << "accel:\n" << cart_acc << std::endl;
-      // std::cout << "err_dot:\n" << err_dot << std::endl;
-      // std::cout << "vel:\n" << cart_vel << std::endl;
-      // std::cout <<" velocity norm: " << cart_vel.norm() <<std::endl;
-      // std::cout << "velocity:\n" << cart_vel << std::endl;
-      // std::cout << "d_X:\n" << d_X << std::endl;
-      // std::cout << "vel_err.norm: " << vel_err.norm() << std::endl;
-
       // Get the Jacobian
       kinematic_state.getJacobian(
           joint_model_group_p,
@@ -254,47 +213,35 @@ int main(int argc, char **argv) {
               joint_model_group_p->getLinkModelNames().back()),
           ref_point, J);
 
-      d_theta = invert(J) * d_X;
+      theta_d = invert(J) * cart_vel;
       ROS_DEBUG_STREAM_ONCE("J: \n" << J);
-      ROS_DEBUG_STREAM_NAMED("stream_d_theta", "d_theta: \n" << d_theta);
-      ROS_DEBUG_STREAM_NAMED("stream_d_X", "d_X: \n" << d_X);
+      ROS_DEBUG_STREAM_NAMED("stream_theta_d", "theta_d: \n" << theta_d);
 
       // check condition number:
       jacobian_condition = J.norm() * invert(J).norm();
+      if (jacobian_condition >= 39){
+        ROS_WARN_NAMED("stream_J_cnd","Jacobian poorly conditioned.");
+      }
       ROS_DEBUG_NAMED("stream_J_cnd", "Jacobian condition: %e",
                       jacobian_condition);
-      // std::cout << "Jacobian condition: " << jacobian_condition << std::endl;
-      /*if(jacobian_condition > 39)
-      {
-        ROS_ERROR("Cannot do Cartesian Jogging due to ill-conditioned
-      Jacobian");
-        ROS_DEBUG_STREAM_NAMED("foobar", "J: \n" << J);
-        ROS_DEBUG_NAMED("foobar", "Jacobian condition: %e", jacobian_condition);
-        //delete &kinematic_state;
-        //delete &kinematic_model;
-        return 0;
-      }*/
-      ROS_DEBUG_NAMED("stream_d_theta", "d_theta[3] * dt: %1.3f", d_theta[3] * dt);
-      // std::cout << "d_theta:\n" << d_theta << std::endl;
+
       for (unsigned int j = 0; j < 7; j++) {
-        // point.positions.at(j) = g_current_joints.position.at(j) +
-        // d_theta[j];
         point.positions.at(j) =
-            g_current_joints.position.at(j) + d_theta[j] * dt;
-        // point.velocities.at(j) = d_theta[j]/dt;
-        point.velocities.at(j) = d_theta[j];
+            g_current_joints.position.at(j) + theta_d[j] * dt;
+
+        point.velocities.at(j) = theta_d[j];
       }
 
       point.time_from_start = ros::Time::now() - g_t_start;
       dummy_traj.points.at(0) = point;
       streaming_pub.publish(dummy_traj);
 
-      //--------------------------------------------------------------------------
     } // end switch(g_state)
 
-    // FIXME This is a blocking call that should be avoided in the future
     loop_rate.sleep();
+    // FIXME This is a blocking call that should be avoided in the future
     ros::spinOnce();
+
   } // end while(ros::ok())
   return 1;
 }

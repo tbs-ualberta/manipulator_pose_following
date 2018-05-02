@@ -1,5 +1,6 @@
 <launch>
   <env name="ROSCONSOLE_CONFIG_FILE"
        value="$(find manipulator_teleop)/config/logger.conf"/>
+  <node pkg="rqt_logger_level" type="rqt_logger_level" name="rqt_logger_level"/>
   <node pkg="manipulator_teleop" type="teleop" name="teleop" output="screen"/>
 </launch>

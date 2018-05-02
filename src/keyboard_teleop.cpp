@@ -55,8 +55,9 @@ int main(int argc, char **argv) {
       nh_set_vel.advertiseService("/keyboard_teleop/set_velocity", cb_set_vel);
   ROS_INFO("Keyboard teleop online.");
 
-  //----------------------------------------------------------------------------
-
+  // TODO Many of these parameters should be set on the parameter server, not
+  //      hard coded. Especially the loop sampling time should be enforced using
+  //      ros::rate.sleep().
   double dt = 0.1;
   g_jogging_velocity = 0.4;
 
@@ -85,15 +86,13 @@ int main(int argc, char **argv) {
 
   ros::Rate loop_rate_hz(100);
 
-  //----------------------------------------------------------------------------
-
   bool stop = false;
   // use system call to make terminal send all keystrokes directly to stdin
   //system("/bin/stty raw");
-  while (ros::ok && !stop) {
 
-    initscr();
-    // nodelay(stdscr, TRUE);
+  initscr();
+  while (ros::ok && !stop) {
+    //nodelay(stdscr, TRUE);
     noecho();
     cbreak();
 
@@ -101,7 +100,10 @@ int main(int argc, char **argv) {
     dof.data.clear();
     dof.data.resize(6, 0);
 
+    // TODO Put this in a separate thread. Blocking is not good here as it
+    //      affects the calculation of a smooth start-and stop velocity
     char command = getch();
+    loop_rate_hz.sleep();
     // ros::Duration(0.1).sleep();
     switch (command) {
     case '1':
@@ -142,18 +144,13 @@ int main(int argc, char **argv) {
       break;
     case 'x':
       stop = true;
-    case -1:
+    case ERR:
       break;
     default:
       break;
     }
 
-    //for (int i = 0; i < 6; i++) {
-    //  cart_vel[i] = dof.data[i];
-    //}
-
     // Time since last point:
-    // ros::topic::waitForMessage<sensor_msgs::JointState>("joint_states");
     dt = (ros::Time::now() - g_t_last).toSec();
     g_t_last = ros::Time::now();
 
@@ -184,17 +181,15 @@ int main(int argc, char **argv) {
       else
         vel_command[i] = 0.0;
     }
-    // std::cout << "vel_command norm: " << vel_command.norm() << std::endl;
     // Compute velocity error.
     err_dot = 1 / dt * ((vel_command - cart_vel) - vel_err);
     vel_err = vel_command - cart_vel;
 
     double err_mag = vel_err.norm();
     ROS_DEBUG_STREAM_NAMED("stream_dbg", "err_mag: " << err_mag);
-    // std::cout << "vel_error norm: " << vel_err.squaredNorm() << std::endl;
 
     // Compute acceleration
-    // This ensures smooth start-up and stop motion?
+    // This ensures smooth start-up and stop motion
     if (err_mag <= 0.015) {
       cart_vel = vel_command;
       cart_acc.setZero();
@@ -218,7 +213,6 @@ int main(int argc, char **argv) {
     }
 
     delta_pub.publish(delta_pose);
-    loop_rate_hz.sleep();
   }
   // use system call to set terminal behaviour to more normal behaviour
   //system("/bin/stty cooked");
