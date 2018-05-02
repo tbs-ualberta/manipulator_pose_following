@@ -177,6 +177,10 @@ int main(int argc, char **argv) {
   }
   point.time_from_start = ros::Duration(0.0);
   dummy_traj.points.push_back(point);
+  streaming_pub.publish(dummy_traj);
+
+  g_t_start = ros::Time::now();
+  g_t_last = ros::Time::now();
   // ---------------------------------------------------------------------------
 
   // TODO Move code for computing desired velocity and acceleration between
@@ -203,16 +207,13 @@ int main(int argc, char **argv) {
       //------------------------------------------------------------------------
       // KEEP HERE
       //------------------------------------------------------------------------
-      if ((ros::Time::now() - g_t_last_cb).toSec() > .1) {
+      double dt_cb = (ros::Time::now() - g_t_last_cb).toSec();
+      if (dt_cb > .5) {
+        ROS_DEBUG_NAMED("stream_dbg", "dt_cb: %1.3f", dt_cb);
         for (unsigned int i = 0; i < 6; i++) {
           g_delta_pose.data.at(i) = 0.0;
         }
       }
-      ROS_DEBUG_NAMED("stream_dpose",
-                "g_delta_pose.data: [%1.2f %1.2f %1.2f %1.2f %1.2f %1.2f]",
-                g_delta_pose.data[0], g_delta_pose.data[1],
-                g_delta_pose.data[2], g_delta_pose.data[3],
-                g_delta_pose.data[4], g_delta_pose.data[5]);
 
       for (int i = 0; i < 6; i++) {
         cart_vel[i] = g_delta_pose.data[i];
@@ -231,6 +232,8 @@ int main(int argc, char **argv) {
       dt = (ros::Time::now() - g_t_last).toSec();
       g_t_last = ros::Time::now();
       kinematic_state.setVariableValues(g_current_joints);
+
+      ROS_DEBUG_STREAM_NAMED("stream_cart_vel", "cart_vel: \n" << cart_vel);
 
       //------------------------------------------------------------------------
 
@@ -271,7 +274,7 @@ int main(int argc, char **argv) {
         //delete &kinematic_model;
         return 0;
       }*/
-
+      ROS_DEBUG_NAMED("stream_d_theta", "d_theta[3] * dt: %1.3f", d_theta[3] * dt);
       // std::cout << "d_theta:\n" << d_theta << std::endl;
       for (unsigned int j = 0; j < 7; j++) {
         // point.positions.at(j) = g_current_joints.position.at(j) +
