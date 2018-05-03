@@ -19,10 +19,20 @@ ros::Time g_t_start, g_t_last, g_t_last_cb;
 // TODO Make below message a stamped one
 manipulator_teleop::DeltaPoseRPY g_delta_pose;
 
-Eigen::MatrixXd invert(Eigen::MatrixXd J) {
-  // TODO Test jacobian condition and conditionally add "damping"
+Eigen::MatrixXd p_inverse(Eigen::MatrixXd J) {
   Eigen::MatrixXd I = Eigen::MatrixXd::Identity(6, 6);
-  return (J.transpose() * (J * J.transpose() + .0000001 * I).inverse());
+  return (J.transpose() * (J * J.transpose()).inverse());
+}
+
+Eigen::MatrixXd sr_inverse(Eigen::MatrixXd J, double w, double w0, double k0) {
+  double k = 0;
+  if (w < w0) {
+    k = k0 * pow(1 - w / w0, 2);
+    ROS_DEBUG_NAMED("stream_J_cnd", "k: %e", k);
+  }
+
+  Eigen::MatrixXd I = Eigen::MatrixXd::Identity(6, 6);
+  return (J.transpose() * (J * J.transpose() + k * I).inverse());
 }
 
 void cb_joint_state(sensor_msgs::JointState msg) { g_current_joints = msg; }
@@ -111,6 +121,11 @@ int main(int argc, char **argv) {
   std::string group_st = "manipulator";
   nh_teleop.getParam("teleop/group", group_st);
 
+  double w0 = 0.1;
+  nh_teleop.getParam("teleop/w0", w0);
+  double k0 = 0.001;
+  nh_teleop.getParam("teleop/k0", k0);
+
   // --- Setup MoveIt interface
   moveit::planning_interface::MoveGroupInterface arm(group_st);
 
@@ -121,7 +136,9 @@ int main(int argc, char **argv) {
   cart_vel.setZero();
   theta_d.setZero();
   double dt = 0.1;
-  double jacobian_condition = 1;
+  double J_cond = 1;
+  double J_cond_nakamura = 1;
+  double w = 1; // Determinat-based jacobian condition
   g_delta_pose.data.resize(6, 0);
 
   // --- Get set up for kinematics:
@@ -175,9 +192,9 @@ int main(int argc, char **argv) {
 
   while (ros::ok()) {
     switch (g_state) {
-    case STATE_IDLE:    // IDLE
+    case STATE_IDLE: // IDLE
       break;
-    case STATE_TELEOP:  // TELEOP
+    case STATE_TELEOP: // TELEOP
       double dt_cb = (ros::Time::now() - g_t_last_cb).toSec();
       if (dt_cb > .5) {
         ROS_DEBUG_NAMED("stream_dbg", "dt_cb: %1.3f", dt_cb);
@@ -213,17 +230,22 @@ int main(int argc, char **argv) {
               joint_model_group_p->getLinkModelNames().back()),
           ref_point, J);
 
-      theta_d = invert(J) * cart_vel;
+      w = pow((J * J.transpose()).determinant(), 0.5);
+      Eigen::MatrixXd sr_inv_J = sr_inverse(J, w, w0, k0);
+      theta_d = sr_inv_J * cart_vel;
       ROS_DEBUG_STREAM_ONCE("J: \n" << J);
       ROS_DEBUG_STREAM_NAMED("stream_theta_d", "theta_d: \n" << theta_d);
 
       // check condition number:
-      jacobian_condition = J.norm() * invert(J).norm();
-      if (jacobian_condition >= 39){
-        ROS_WARN_NAMED("stream_J_cnd","Jacobian poorly conditioned.");
+      J_cond = J.norm() * p_inverse(J).norm();
+      J_cond_nakamura = J.norm() * sr_inv_J.norm();
+      if (w <= w0) {
+        ROS_WARN_NAMED("stream_J_cnd", "Close to singularity (w = %1.6f).", w);
       }
       ROS_DEBUG_NAMED("stream_J_cnd", "Jacobian condition: %e",
-                      jacobian_condition);
+                      J_cond);
+      ROS_DEBUG_NAMED("stream_J_cnd", "Jacobian condition: %e",
+                      J_cond_nakamura);
 
       for (unsigned int j = 0; j < 7; j++) {
         point.positions.at(j) =

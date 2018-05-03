@@ -2,5 +2,12 @@
   <env name="ROSCONSOLE_CONFIG_FILE"
        value="$(find manipulator_teleop)/config/logger.conf"/>
   <node pkg="rqt_logger_level" type="rqt_logger_level" name="rqt_logger_level"/>
-  <node pkg="manipulator_teleop" type="teleop" name="teleop" output="screen"/>
+  <node pkg="manipulator_teleop" type="teleop" name="teleop" output="screen">
+    <rosparam>
+      rate: 100
+      group: 'manipulator'
+      w0: 0.01
+      k0: 0.01
+    </rosparam>
+  </node>
 </launch>
