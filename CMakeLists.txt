@@ -146,10 +146,10 @@ include_directories(
 ## Declare a C++ executable
 ## With catkin_make all packages are built within a single CMake context
 ## The recommended prefix ensures that target names across packages don't collide
-add_executable(test_traject src/test_traject.cpp)
-add_executable(moveit_interface src/moveit_interface.cpp)
-add_executable(teleop src/teleop.cpp)
-add_executable(keyboard_teleop src/keyboard_teleop.cpp)
+add_executable(test_traject src/test_traject_node.cpp)
+add_executable(moveit_interface src/moveit_interface_node.cpp)
+add_executable(teleop src/teleop_node.cpp)
+add_executable(kb_jogging src/kb_jogging_node.cpp)
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
@@ -171,7 +171,7 @@ target_link_libraries(moveit_interface
 target_link_libraries(teleop
   ${catkin_LIBRARIES}
 )
-target_link_libraries(keyboard_teleop
+target_link_libraries(kb_jogging
   ${catkin_LIBRARIES}
   ncurses
   ${Eigen_LIBRARIES}

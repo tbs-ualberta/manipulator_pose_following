@@ -1,6 +1,6 @@
 <launch>
   <env name="ROSCONSOLE_CONFIG_FILE"
        value="$(find manipulator_teleop)/config/logger.conf"/>
-  <node pkg="manipulator_teleop" type="keyboard_teleop" name="keyboard_teleop"
+  <node pkg="manipulator_teleop" type="kb_jogging" name="kb_jogging"
         output="screen"/>
 </launch>

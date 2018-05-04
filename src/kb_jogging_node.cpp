@@ -39,7 +39,7 @@ bool cb_set_vel(manipulator_teleop::SetVelocity::Request &req,
 
 int main(int argc, char **argv) {
 
-  ros::init(argc, argv, "keyboard_teleop");
+  ros::init(argc, argv, "kb_jogging");
   ros::NodeHandle n;
   ros::NodeHandle nh_set_vel;
   ros::CallbackQueue queue_set_vel;
