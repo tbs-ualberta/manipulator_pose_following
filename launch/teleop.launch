@@ -4,7 +4,7 @@
   <node pkg="rqt_logger_level" type="rqt_logger_level" name="rqt_logger_level"/>
   <node pkg="manipulator_teleop" type="teleop" name="teleop" output="screen">
     <rosparam>
-      rate: 100
+      rate: 40
       group: 'manipulator'
       w0: 0.01
       k0: 0.01

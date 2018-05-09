@@ -1,6 +1,7 @@
 <launch>
   <env name="ROSCONSOLE_CONFIG_FILE"
        value="$(find manipulator_teleop)/config/logger.conf"/>
+  <include file="$(find manipulator_teleop)/launch/teleop.launch" />
   <node pkg="manipulator_teleop" type="test_traject" name="test_traject"
         output="screen">
     <rosparam>

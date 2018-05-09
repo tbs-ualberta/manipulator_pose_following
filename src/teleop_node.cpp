@@ -1,10 +1,12 @@
 
+#include <geometry_msgs/PoseStamped.h>
 #include <moveit/move_group_interface/move_group_interface.h>
 #include <moveit/robot_model/robot_model.h>
 #include <moveit/robot_model_loader/robot_model_loader.h>
 #include <moveit/robot_state/robot_state.h>
 #include <ros/callback_queue.h>
 #include <ros/ros.h>
+#include <tf/transform_datatypes.h>
 
 #include "manipulator_teleop/DeltaPoseRPY.h"
 #include "manipulator_teleop/StartStopTeleop.h"
@@ -13,11 +15,12 @@
 bool g_do_teleop = false;
 const int STATE_IDLE = 0;
 const int STATE_TELEOP = 1;
-int g_state = STATE_IDLE;
+int g_state = STATE_TELEOP;
 sensor_msgs::JointState g_current_joints;
-ros::Time g_t_start, g_t_last, g_t_last_cb;
+ros::Time g_t_start, g_t_last, g_t_last_dpose_cb;
 // TODO Make below message a stamped one
 manipulator_teleop::DeltaPoseRPY g_delta_pose;
+geometry_msgs::PoseStamped g_pose, g_pose_last;
 
 Eigen::MatrixXd p_inverse(Eigen::MatrixXd J) {
   Eigen::MatrixXd I = Eigen::MatrixXd::Identity(6, 6);
@@ -59,7 +62,7 @@ bool cb_stop_teleop(manipulator_teleop::StartStopTeleop::Request &req,
 
 void cb_delta_pose_rpy(const manipulator_teleop::DeltaPoseRPY::ConstPtr &msg) {
 
-  g_t_last_cb = ros::Time::now();
+  g_t_last_dpose_cb = ros::Time::now();
   // Check valid deltas:
   if (msg->data.size() != 6) {
     ROS_ERROR("Delta pose must be of size 6 (position, orientation (RPY)). "
@@ -67,8 +70,77 @@ void cb_delta_pose_rpy(const manipulator_teleop::DeltaPoseRPY::ConstPtr &msg) {
     return;
   }
   // TODO make 'DeltaPoseRPY' a stamped message (header) to merge the timestamp
-  //      g_t_last_cb into it.
+  //      g_t_last_dpose_cb into it.
   g_delta_pose = *msg;
+}
+
+manipulator_teleop::DeltaPoseRPY calc_dpose(geometry_msgs::PoseStamped pose) {
+
+  ROS_DEBUG_STREAM_NAMED("stream_calc_dpose", "calc_dpose:pose: \n" << pose);
+
+  ros::Time t_start = ros::Time::now();
+  // TODO the initial |dt| might be really hight -> add a check on it
+  double dt = 0;
+  manipulator_teleop::DeltaPoseRPY delta_pose;
+  manipulator_teleop::DeltaPoseRPY pose_rpy, pose_rpy_last;
+  pose_rpy.data.resize(6, 0);
+  pose_rpy_last.data.resize(6, 0);
+  delta_pose.data.resize(6, 0);
+
+  if (g_pose_last.header.stamp.toSec() != 0) {
+    dt = (pose.header.stamp - g_pose_last.header.stamp).toSec();
+
+    // --- Convert from quaternions to Euler angles
+    tf::Quaternion q(pose.pose.orientation.x, pose.pose.orientation.y,
+                     pose.pose.orientation.z, pose.pose.orientation.w);
+    tf::Quaternion q_last(
+        g_pose_last.pose.orientation.x, g_pose_last.pose.orientation.y,
+        g_pose_last.pose.orientation.z, g_pose_last.pose.orientation.w);
+    tf::Matrix3x3 m(q);
+    tf::Matrix3x3 m_last(q_last);
+    double roll, pitch, yaw;
+    m.getRPY(roll, pitch, yaw);
+    pose_rpy.data[3] = roll;
+    pose_rpy.data[4] = pitch;
+    pose_rpy.data[5] = yaw;
+    m_last.getRPY(roll, pitch, yaw);
+    pose_rpy_last.data[3] = roll;
+    pose_rpy_last.data[4] = pitch;
+    pose_rpy_last.data[5] = yaw;
+    pose_rpy.data[0] = pose.pose.position.x;
+    pose_rpy.data[1] = pose.pose.position.y;
+    pose_rpy.data[2] = pose.pose.position.z;
+    pose_rpy_last.data[0] = g_pose_last.pose.position.x;
+    pose_rpy_last.data[1] = g_pose_last.pose.position.y;
+    pose_rpy_last.data[2] = g_pose_last.pose.position.z;
+
+    for (int i = 0; i < 6; i++) {
+      delta_pose.data[i] = (pose_rpy.data[i] - pose_rpy_last.data[i]) / dt;
+    }
+  } else {
+    delta_pose.data.clear();
+    delta_pose.data.resize(6, 0);
+  }
+
+  ROS_DEBUG_NAMED("stream_calc_dpose", "calc_dpose:dt: %2.3f", dt);
+  ROS_DEBUG_STREAM_NAMED("stream_calc_dpose", "calc_dpose:pose_rpy: \n"
+                                                  << pose_rpy);
+  ROS_DEBUG_STREAM_NAMED("stream_calc_dpose", "calc_dpose:pose_rpy_last: \n"
+                                                  << pose_rpy_last);
+  ROS_DEBUG_STREAM_NAMED("stream_calc_dpose", "calc_dpose:delta_pose: \n"
+                                                  << delta_pose);
+
+  g_pose_last = pose;
+
+  ROS_DEBUG_NAMED("stream_calc_dpose", "dur_calc_dpose: %e",
+                  (ros::Time::now() - t_start).toSec());
+
+  return delta_pose;
+}
+
+void cb_pose_quat(const geometry_msgs::PoseStamped::ConstPtr &msg) {
+  g_t_last_dpose_cb = ros::Time::now();
+  g_delta_pose = calc_dpose(*msg);
 }
 
 int main(int argc, char **argv) {
@@ -81,17 +153,23 @@ int main(int argc, char **argv) {
   //     - start and stop service callbacks
   ros::NodeHandle nh_teleop;
   ros::NodeHandle nh_startstop;
+  ros::NodeHandle nh_pose_quat;
 
   // --- Setup custom callback queues for
   //     - start_teleop and stop_teleop callbacks
+  //     - pose callback
   ros::CallbackQueue queue_startstop;
   nh_startstop.setCallbackQueue(&queue_startstop);
+  ros::CallbackQueue queue_pose_quat;
+  nh_pose_quat.setCallbackQueue(&queue_pose_quat);
 
   // --- Start an AsyncSpinner with one thread for calls to services
   //     'start_teleop' and 'stop_teleop'.
   // TODO does this thread need to be stopped when main() is left?
   ros::AsyncSpinner spin_startstop(1, &queue_startstop);
   spin_startstop.start();
+  ros::AsyncSpinner spin_pose_quat(1, &queue_pose_quat);
+  spin_pose_quat.start();
 
   // --- Setup publishers
   ros::Publisher streaming_pub =
@@ -99,8 +177,10 @@ int main(int argc, char **argv) {
                                                             10);
 
   // --- Setup topic subscritions
-  ros::Subscriber sub_pose =
+  ros::Subscriber sub_dpose =
       nh_teleop.subscribe("teleop/delta_pose_rpy", 1, cb_delta_pose_rpy);
+  ros::Subscriber sub_pose =
+      nh_pose_quat.subscribe("teleop/pose", 1, cb_pose_quat);
   ros::Subscriber sub_joint =
       nh_teleop.subscribe("joint_states", 1, cb_joint_state);
 
@@ -175,6 +255,8 @@ int main(int argc, char **argv) {
   joint_model_group_p->printGroupInfo(stream2);
   ROS_DEBUG_STREAM("joint_model_group_info: " << str2.str());
 
+
+  ROS_DEBUG_STREAM("g_current_joints: \n" << g_current_joints);
   // --- Initialize jogging start
   trajectory_msgs::JointTrajectory dummy_traj;
   dummy_traj.joint_names = g_current_joints.name;
@@ -195,7 +277,7 @@ int main(int argc, char **argv) {
     case STATE_IDLE: // IDLE
       break;
     case STATE_TELEOP: // TELEOP
-      double dt_cb = (ros::Time::now() - g_t_last_cb).toSec();
+      double dt_cb = (ros::Time::now() - g_t_last_dpose_cb).toSec();
       if (dt_cb > .5) {
         ROS_DEBUG_NAMED("stream_dbg", "dt_cb: %1.3f", dt_cb);
         for (unsigned int i = 0; i < 6; i++) {
@@ -242,12 +324,17 @@ int main(int argc, char **argv) {
       if (w <= w0) {
         ROS_WARN_NAMED("stream_J_cnd", "Close to singularity (w = %1.6f).", w);
       }
-      ROS_DEBUG_NAMED("stream_J_cnd", "Jacobian condition: %e",
-                      J_cond);
+      ROS_DEBUG_NAMED("stream_J_cnd", "Jacobian condition: %e", J_cond);
       ROS_DEBUG_NAMED("stream_J_cnd", "Jacobian condition: %e",
                       J_cond_nakamura);
 
       for (unsigned int j = 0; j < 7; j++) {
+        double theta_d_limit = 2;
+        if (theta_d[j] > theta_d_limit) {
+          ROS_WARN("Angular velocity of joint %d exceeding %2.2f.", j,
+                    theta_d_limit);
+          g_state = STATE_IDLE;
+        }
         point.positions.at(j) =
             g_current_joints.position.at(j) + theta_d[j] * dt;
 
