@@ -5,7 +5,7 @@
   <node pkg="manipulator_teleop" type="test_traject" name="test_traject"
         output="screen">
     <rosparam>
-      rate: 100
+      rate: 40
     </rosparam>
     <remap from="pose" to="teleop/pose" />
   </node>

@@ -336,7 +336,7 @@ int main(int argc, char **argv) {
           g_state = STATE_IDLE;
         }
         point.positions.at(j) =
-            g_current_joints.position.at(j) + theta_d[j] * dt;
+            point.positions.at(j) + theta_d[j] * dt;
 
         point.velocities.at(j) = theta_d[j];
       }

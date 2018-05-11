@@ -36,7 +36,7 @@ int main(int argc, char **argv) {
   double a_ref[2] = {0, 0};
   double v_ref[2] = {0, 0};
   double pos_ref[2] = {0, 0};
-  double t_period = 5;
+  double t_period = 7;
   double amp = 0.05;
   int traj = TRAJ_1;
   double dt = 0;

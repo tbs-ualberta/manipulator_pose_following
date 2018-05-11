@@ -59,13 +59,13 @@ int main(int argc, char **argv) {
   //      hard coded. Especially the loop sampling time should be enforced using
   //      ros::rate.sleep().
   double dt = 0.1;
-  g_jogging_velocity = 0.4;
+  g_jogging_velocity = 0.5;
 
-  double cart_translation_vel = .75;
+  double cart_translation_vel = .1;
   g_max_translat_acc = .015;
   g_translat_acc = g_max_translat_acc;
 
-  double cart_rotation_vel = 1.5;
+  double cart_rotation_vel = 0.78;
   g_max_rot_acc = 0.05;
   g_rot_acc = g_max_rot_acc;
   double k_rotation = 0.1;
@@ -84,17 +84,19 @@ int main(int argc, char **argv) {
   g_t_last = ros::Time::now();
   dof.data.resize(6, 0);
 
-  ros::Rate loop_rate_hz(100);
+  ros::Rate loop_rate_hz(40);
 
   bool stop = false;
   // use system call to make terminal send all keystrokes directly to stdin
-  //system("/bin/stty raw");
+  system("/bin/stty raw");
 
-  initscr();
+  //initscr();
+  //stdscr->_delay = 1;
+  //nodelay(stdscr, TRUE);
+  //noecho();
+  //raw();
+  //cbreak();
   while (ros::ok && !stop) {
-    //nodelay(stdscr, TRUE);
-    noecho();
-    cbreak();
 
     // Clear the dof.
     dof.data.clear();
@@ -102,8 +104,8 @@ int main(int argc, char **argv) {
 
     // TODO Put this in a separate thread. Blocking is not good here as it
     //      affects the calculation of a smooth start-and stop velocity
-    char command = getch();
-    loop_rate_hz.sleep();
+    // TODO Add buttons for jogging speed adjustment
+    char command = my_getch();
     // ros::Duration(0.1).sleep();
     switch (command) {
     case '1':
@@ -213,10 +215,11 @@ int main(int argc, char **argv) {
     }
 
     delta_pub.publish(delta_pose);
+    loop_rate_hz.sleep();
   }
   // use system call to set terminal behaviour to more normal behaviour
-  //system("/bin/stty cooked");
-  endwin();
+  system("/bin/stty cooked");
+  //endwin();
 
   return (0);
 }
