@@ -11,6 +11,8 @@
 #include "manipulator_teleop/DeltaPoseRPY.h"
 #include "manipulator_teleop/StartStopTeleop.h"
 
+#include <math.h>
+
 // --- Globals
 bool g_do_teleop = false;
 const int STATE_IDLE = 0;
@@ -206,6 +208,9 @@ int main(int argc, char **argv) {
   double k0 = 0.001;
   nh_teleop.getParam("teleop/k0", k0);
 
+  double theta_d_limit = 3.14;
+  nh_teleop.getParam("teleop/theta_d_lim", theta_d_limit);
+
   // --- Setup MoveIt interface
   moveit::planning_interface::MoveGroupInterface arm(group_st);
 
@@ -329,10 +334,10 @@ int main(int argc, char **argv) {
                       J_cond_nakamura);
 
       for (unsigned int j = 0; j < 7; j++) {
-        double theta_d_limit = 2;
-        if (theta_d[j] > theta_d_limit) {
+        if (fabs(theta_d[j]) > theta_d_limit) {
           ROS_WARN("Angular velocity of joint %d exceeding %2.2f.", j,
                     theta_d_limit);
+          ROS_WARN("Changing state to STATE_IDLE.");
           g_state = STATE_IDLE;
         }
         point.positions.at(j) =
