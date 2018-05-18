@@ -55,8 +55,6 @@ Interface node for planning and executing trajectories using MoveIt!, and for mo
             - `pose_rpy` (`double[7]`): Desired end-effector pose as quaternions.
             - `max_vel_fact` (`double`): Velocity factor of the maximum velocity [0,1]
             - `max_acc_fact` (`double`): Acceleration factor of the maximum acceleration [0,1]
-- *Parameters*:
-    - `rate` - (`int`, default: 10) [Hz]
 
 #### `kb_jogging`:
 Node for jogging the manipulator's end-effector pose via keyboard.

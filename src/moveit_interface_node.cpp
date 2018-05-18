@@ -14,7 +14,6 @@
 static const std::string PLANNING_GROUP = "manipulator";
 geometry_msgs::Pose g_pose_ref;
 
-
 bool callbackMoveHome(manipulator_teleop::MoveHome::Request &req,
                       manipulator_teleop::MoveHome::Response &res) {
 
@@ -166,34 +165,7 @@ int main(int argc, char **argv) {
   ros::ServiceServer srv_move_to_quat = nh_move.advertiseService(
       "/moveit_interface/move_to_quat", callbackMoveToQuat);
 
-  // --- Obtain parameters
-  int rate_hz = 10;
-  nh_move.getParam("moveit_interface/rate", rate_hz);
-  ros::Rate loop_rate(rate_hz);
-  //move_group.setPlanningTime(1.0 / (double)rate_hz -
-  //                           1.0 / (2 * (double)rate_hz));
-
-  //ros::spin();
   while (ros::ok()) {
-    //ros::spinOnce();
-  /*
-    if (g_do_teleop) {
-      ros::spinOnce();
-
-      move_group.setPoseTarget(g_pose_ref);
-      moveit::planning_interface::MoveGroupInterface::Plan plan;
-
-      bool success = (move_group.plan(plan) ==
-                      moveit::planning_interface::MoveItErrorCode::SUCCESS);
-
-      if (success) {
-        move_group.execute(plan);
-      }
-    }
-
-    // Loop until user aborts (Ctrl+C)
-    loop_rate.sleep();
-    */
+    ros::Duration(0.1).sleep();
   }
-
 }
