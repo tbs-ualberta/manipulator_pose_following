@@ -60,15 +60,26 @@ Interface node for planning and executing trajectories using MoveIt!, and for mo
 Node for jogging the manipulator's end-effector pose via keyboard.
 
 
-- *Button assignments*:
-    - Translation: ±x: "1"/"q", ±y: "2"/"w", ±z: "3"/"e"
-    - Rotation: ±x: "4"/"r", ±y: "5"/"t", ±z: "6"/"y"
-    - Stop: "x"
+- *Key assignments*:  
+
+    ```
+    Translation: +x: "1" | +y: "2" | +z: "3"
+                 -x: "q" | -y: "w" | -z: "e"  
+
+      Rotation:  +x: "4" | +y: "5" | +z: "6"
+                 -x: "r" | -y: "t" | -z: "y"
+
+      Velocity:   +: "0"
+                  -: "p"
+
+      Stop:          "x"
+    ```
+
 - *Published topics*:
     - `teleop/delta_pose_rpy` - (manipulator_teleop/DeltaPoseRPY)  
       The pose derivative in Euler angles (RPY).
-- *Services*:
-    - `/keyboard_teleop/set_velocity`  
-      Sets the jogging velocity factor where the maximum jogging velocity is set to 0.5 m/s.
-        - Parameters:
-            - `velocity` (`double`): Velocity factor [0,1]
+- *Parameters*:
+    - `jogging_vel` - (`double`, default: 0.1): Velocity adjustment factor [0,1]
+    - `rate` - (`int`, default: 40): Node loop rate [Hz]
+    - `max_trans_vel` - (`double`, default: 0.5): Maximum translational end-effector velocity [m/s]
+    - `max_rot_vel` - (`double`, default: 1): Maximum rotational end-effector velocity [rad/s]

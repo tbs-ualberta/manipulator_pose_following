@@ -4,7 +4,6 @@
 #include "manipulator_teleop/DeltaPoseRPY.h"
 #include "manipulator_teleop/SetVelocity.h"
 
-#include <curses.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <termios.h>
@@ -19,53 +18,62 @@ double g_max_rot_acc, g_rot_acc;
 ros::Time g_t_start, g_t_last;
 
 // --- Function declarations
-char my_getch(); // Non-blocking getch()
-
-bool cb_set_vel(manipulator_teleop::SetVelocity::Request &req,
-                manipulator_teleop::SetVelocity::Response &res) {
-
-  if (req.velocity < 0 || req.velocity > 1.0) {
-    ROS_WARN(
-        "Invalid jogging velocity requested. Value must be on interval [0,1].");
-    res.result = false;
-  } else {
-    g_jogging_velocity = req.velocity;
-    g_translat_acc = req.velocity * g_max_translat_acc;
-    g_rot_acc = req.velocity * g_max_rot_acc;
-    res.result = true;
-  }
-  return res.result;
-}
+char getch_async(); // Non-blocking getch_async()
 
 int main(int argc, char **argv) {
 
   ros::init(argc, argv, "kb_jogging");
   ros::NodeHandle n;
-  ros::NodeHandle nh_set_vel;
-  ros::CallbackQueue queue_set_vel;
-  nh_set_vel.setCallbackQueue(&queue_set_vel);
-  ros::AsyncSpinner spin_set_vel(1, &queue_set_vel);
-  spin_set_vel.start();
 
   ros::Publisher delta_pub =
       n.advertise<manipulator_teleop::DeltaPoseRPY>("teleop/delta_pose_rpy", 1);
   manipulator_teleop::DeltaPoseRPY dof;
 
-  ros::ServiceServer srv_set_velocity =
-      nh_set_vel.advertiseService("/keyboard_teleop/set_velocity", cb_set_vel);
   ROS_INFO("Keyboard teleop online.");
+  ROS_INFO_STREAM(
+      "\n"
+      << "\n"
+      << "Key assignments:\n"
+      << "\n"
+      << "Translation: +x: \"1\" | +y: \"2\" | +z: \"3\"\n"
+      << "             -x: \"q\" | -y: \"w\" | -z: \"e\"\n"
+      << "\n"
+      << "Rotation:    +x: \"4\" | +y: \"5\" | +z: \"6\"\n"
+      << "             -x: \"r\" | -y: \"t\" | -z: \"y\"\n"
+      << "\n"
+      << "Velocity:     +: \"0\"\n"
+      << "              -: \"p\"\n"
+      << "\n"
+      << "Stop:            \"x\""
+  );
 
-  // TODO Many of these parameters should be set on the parameter server, not
-  //      hard coded. Especially the loop sampling time should be enforced using
-  //      ros::rate.sleep().
+  // --- Get params from parameter server
+  g_jogging_velocity = 0.1;
+  n.getParam("kb_jogging/jogging_vel", g_jogging_velocity);
+
+  int rate_hz = 40;
+  n.getParam("kb_jogging/rate", rate_hz);
+  ros::Rate loop_rate_hz(rate_hz);
+
+  const double max_cart_translation_vel = .5;
+  double cart_translation_vel = max_cart_translation_vel;
+  n.getParam("kb_jogging/max_trans_vel", cart_translation_vel);
+  if(cart_translation_vel > max_cart_translation_vel){
+    cart_translation_vel = max_cart_translation_vel;
+  }
+
+  const double max_cart_rotation_vel = 1;
+  double cart_rotation_vel = max_cart_rotation_vel;
+  n.getParam("kb_jogging/max_rot_vel", cart_rotation_vel);
+  if(cart_rotation_vel > max_cart_rotation_vel){
+    cart_rotation_vel = max_cart_rotation_vel;
+  }
+
   double dt = 0.1;
-  g_jogging_velocity = 0.5;
 
-  double cart_translation_vel = .1;
   g_max_translat_acc = .015;
   g_translat_acc = g_max_translat_acc;
 
-  double cart_rotation_vel = 0.78;
   g_max_rot_acc = 0.05;
   g_rot_acc = g_max_rot_acc;
   double k_rotation = 0.1;
@@ -84,29 +92,19 @@ int main(int argc, char **argv) {
   g_t_last = ros::Time::now();
   dof.data.resize(6, 0);
 
-  ros::Rate loop_rate_hz(40);
-
   bool stop = false;
-  // use system call to make terminal send all keystrokes directly to stdin
-  system("/bin/stty raw");
 
-  //initscr();
-  //stdscr->_delay = 1;
-  //nodelay(stdscr, TRUE);
-  //noecho();
-  //raw();
-  //cbreak();
+  system("/bin/stty raw");   // Raw mode (send all keystrokes directly to stdin)
+  system("/bin/stty -echo"); // Turn off echo
+
   while (ros::ok && !stop) {
 
     // Clear the dof.
     dof.data.clear();
     dof.data.resize(6, 0);
 
-    // TODO Put this in a separate thread. Blocking is not good here as it
-    //      affects the calculation of a smooth start-and stop velocity
     // TODO Add buttons for jogging speed adjustment
-    char command = my_getch();
-    // ros::Duration(0.1).sleep();
+    char command = getch_async();
     switch (command) {
     case '1':
       dof.data.at(0) = 1.0;
@@ -144,9 +142,22 @@ int main(int argc, char **argv) {
     case 'y':
       dof.data.at(5) = -1.0;
       break;
+    case '0':
+      g_jogging_velocity += 0.1;
+      if (g_jogging_velocity > 1){
+        g_jogging_velocity = 1;
+      }
+      ROS_INFO("Jogging velocity factor: %1.1f\r", g_jogging_velocity);
+      break;
+    case 'p':
+      g_jogging_velocity -= 0.1;
+      if (g_jogging_velocity < 0){
+        g_jogging_velocity = 0;
+      }
+      ROS_INFO("Jogging velocity factor: %1.1f\r", g_jogging_velocity);
+      break;
     case 'x':
       stop = true;
-    case ERR:
       break;
     default:
       break;
@@ -219,12 +230,12 @@ int main(int argc, char **argv) {
   }
   // use system call to set terminal behaviour to more normal behaviour
   system("/bin/stty cooked");
-  //endwin();
+  system("/bin/stty echo");
 
   return (0);
 }
 
-char my_getch() {
+char getch_async() {
   // https://answers.ros.org/question/63491/keyboard-key-pressed/
   fd_set set;
   struct timeval timeout;
@@ -240,14 +251,19 @@ char my_getch() {
 
   rv = select(filedesc + 1, &set, NULL, NULL, &timeout);
 
-  struct termios old = {0};
-  if (tcgetattr(filedesc, &old) < 0)
+  struct termios oldattr = {0};
+  struct termios newattr = {0};
+  if (tcgetattr(filedesc, &oldattr) < 0)
     printf("tcsetattr()");
-  old.c_lflag &= ~ICANON;
-  old.c_lflag |= ECHO;
-  old.c_cc[VMIN] = 1;
-  old.c_cc[VTIME] = 0;
-  if (tcsetattr(filedesc, TCSANOW, &old) < 0)
+
+  newattr = oldattr;
+  newattr.c_lflag &= ~ICANON;
+  newattr.c_lflag &= ~ECHO;
+  newattr.c_lflag |= ECHONL;
+  newattr.c_lflag |= (OCRNL | ONLCR);
+  newattr.c_cc[VMIN] = 1;
+  newattr.c_cc[VTIME] = 0;
+  if (tcsetattr(filedesc, TCSANOW, &newattr) < 0)
     printf("tcsetattr ICANON");
 
   if (rv == -1)
@@ -257,9 +273,7 @@ char my_getch() {
   else
     read(filedesc, &buff, len);
 
-  old.c_lflag |= ICANON;
-  old.c_lflag |= ECHO;
-  if (tcsetattr(filedesc, TCSADRAIN, &old) < 0)
+  if (tcsetattr(filedesc, TCSADRAIN, &oldattr) < 0)
     printf("tcsetattr ~ICANON");
   return (buff);
 }
