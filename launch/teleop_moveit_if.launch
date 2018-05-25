@@ -1,0 +1,16 @@
+<launch>
+  <env name="ROSCONSOLE_CONFIG_FILE"
+       value="$(find manipulator_teleop)/config/logger.conf"/>
+  <node pkg="manipulator_teleop" type="teleop" name="teleop" output="screen">
+    <rosparam>
+      rate: 40
+      group: 'manipulator'
+      w0: 0.01
+      k0: 0.01
+      theta_d_lim: 3.14
+    </rosparam>
+  </node>
+  <node pkg="manipulator_teleop" type="moveit_interface"
+        name="moveit_interface" output="screen">
+  </node>
+</launch>

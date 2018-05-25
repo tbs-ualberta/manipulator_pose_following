@@ -17,9 +17,9 @@
 bool g_do_teleop = false;
 const int STATE_IDLE = 0;
 const int STATE_TELEOP = 1;
-int g_state = STATE_TELEOP;
+int g_state = STATE_IDLE;
 sensor_msgs::JointState g_current_joints;
-ros::Time g_t_start, g_t_last, g_t_last_dpose_cb;
+ros::Time g_t_start, g_t_last, g_t_last_cb;
 // TODO Make below message a stamped one
 manipulator_teleop::DeltaPoseRPY g_delta_pose;
 geometry_msgs::PoseStamped g_pose, g_pose_last;
@@ -40,7 +40,10 @@ Eigen::MatrixXd sr_inverse(Eigen::MatrixXd J, double w, double w0, double k0) {
   return (J.transpose() * (J * J.transpose() + k * I).inverse());
 }
 
-void cb_joint_state(sensor_msgs::JointState msg) { g_current_joints = msg; }
+void cb_joint_state(sensor_msgs::JointState msg) {
+  ROS_DEBUG_NAMED("stream_dbg", "New joint state...");
+  g_current_joints = msg;
+}
 
 bool cb_start_teleop(manipulator_teleop::StartStopTeleop::Request &req,
                      manipulator_teleop::StartStopTeleop::Response &res) {
@@ -64,7 +67,12 @@ bool cb_stop_teleop(manipulator_teleop::StartStopTeleop::Request &req,
 
 void cb_delta_pose_rpy(const manipulator_teleop::DeltaPoseRPY::ConstPtr &msg) {
 
-  g_t_last_dpose_cb = ros::Time::now();
+  if (g_state == STATE_IDLE) {
+    g_state = STATE_TELEOP;
+    g_t_start = ros::Time::now();
+  }
+
+  g_t_last_cb = ros::Time::now();
   // Check valid deltas:
   if (msg->data.size() != 6) {
     ROS_ERROR("Delta pose must be of size 6 (position, orientation (RPY)). "
@@ -72,7 +80,7 @@ void cb_delta_pose_rpy(const manipulator_teleop::DeltaPoseRPY::ConstPtr &msg) {
     return;
   }
   // TODO make 'DeltaPoseRPY' a stamped message (header) to merge the timestamp
-  //      g_t_last_dpose_cb into it.
+  //      g_t_last_cb into it.
   g_delta_pose = *msg;
 }
 
@@ -141,7 +149,13 @@ manipulator_teleop::DeltaPoseRPY calc_dpose(geometry_msgs::PoseStamped pose) {
 }
 
 void cb_pose_quat(const geometry_msgs::PoseStamped::ConstPtr &msg) {
-  g_t_last_dpose_cb = ros::Time::now();
+
+  if (g_state == STATE_IDLE) {
+    g_state = STATE_TELEOP;
+    g_t_start = ros::Time::now();
+  }
+
+  g_t_last_cb = ros::Time::now();
   g_delta_pose = calc_dpose(*msg);
 }
 
@@ -260,7 +274,6 @@ int main(int argc, char **argv) {
   joint_model_group_p->printGroupInfo(stream2);
   ROS_DEBUG_STREAM("joint_model_group_info: " << str2.str());
 
-
   ROS_DEBUG_STREAM("g_current_joints: \n" << g_current_joints);
   // --- Initialize jogging start
   trajectory_msgs::JointTrajectory dummy_traj;
@@ -272,22 +285,31 @@ int main(int argc, char **argv) {
   }
   point.time_from_start = ros::Duration(0.0);
   dummy_traj.points.push_back(point);
-  streaming_pub.publish(dummy_traj);
 
-  g_t_start = ros::Time::now();
   g_t_last = ros::Time::now();
 
   while (ros::ok()) {
     switch (g_state) {
+
     case STATE_IDLE: // IDLE
+
+      // --- Keep track of the joint state (positions)
+      for (unsigned int joint = 0; joint < 7; joint++) {
+        point.positions.at(joint) = g_current_joints.position.at(joint);
+        point.velocities.at(joint) = 0;
+      }
+      point.time_from_start = ros::Duration(0.0);
       break;
+
     case STATE_TELEOP: // TELEOP
-      double dt_cb = (ros::Time::now() - g_t_last_dpose_cb).toSec();
-      if (dt_cb > .5) {
+
+      double dt_cb = (ros::Time::now() - g_t_last_cb).toSec();
+      if (dt_cb > 4 * (1 / (double)rate_hz)) {
         ROS_DEBUG_NAMED("stream_dbg", "dt_cb: %1.3f", dt_cb);
         for (unsigned int i = 0; i < 6; i++) {
           g_delta_pose.data.at(i) = 0.0;
         }
+        g_state = STATE_IDLE;
       }
 
       for (int i = 0; i < 6; i++) {
@@ -299,7 +321,6 @@ int main(int argc, char **argv) {
       std::stringbuf str;
       stream.rdbuf(&str);
       kinematic_state.printTransform(frame_tf, stream);
-      // std::cout << "transform: \n" << str.str() << endl;
       ROS_DEBUG_STREAM_NAMED("stream_pose", "EEF-pose: " << str.str());
 
       // Time since last point:
@@ -336,12 +357,11 @@ int main(int argc, char **argv) {
       for (unsigned int j = 0; j < 7; j++) {
         if (fabs(theta_d[j]) > theta_d_limit) {
           ROS_WARN("Angular velocity of joint %d exceeding %2.2f.", j,
-                    theta_d_limit);
+                   theta_d_limit);
           ROS_WARN("Changing state to STATE_IDLE.");
           g_state = STATE_IDLE;
         }
-        point.positions.at(j) =
-            point.positions.at(j) + theta_d[j] * dt;
+        point.positions.at(j) = point.positions.at(j) + theta_d[j] * dt;
 
         point.velocities.at(j) = theta_d[j];
       }

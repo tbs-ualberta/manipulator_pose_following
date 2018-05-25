@@ -8,14 +8,42 @@
 #include "manipulator_teleop/MoveHome.h"
 #include "manipulator_teleop/MoveToQuat.h"
 #include "manipulator_teleop/MoveToRPY.h"
+#include "manipulator_teleop/StartStopTeleop.h"
 
 #include <vector>
 
 static const std::string PLANNING_GROUP = "manipulator";
 geometry_msgs::Pose g_pose_ref;
 
+bool start_teleop() {
+  // --- Stop teleop node (STATE_TELEOP --> STATE_IDLE)
+  std::string srv_name = "/teleop/start";
+  bool success = ros::service::exists(srv_name, true);
+  if (success) {
+    manipulator_teleop::StartStopTeleop::Request req;
+    manipulator_teleop::StartStopTeleop::Response res;
+    ros::service::call(srv_name, req, res);
+    ros::service::waitForService(srv_name);
+  }
+  return success;
+}
+
+bool stop_teleop() {
+  // --- Stop teleop node (STATE_TELEOP --> STATE_IDLE)
+  std::string srv_name = "/teleop/stop";
+  if (ros::service::exists(srv_name, true)) {
+    manipulator_teleop::StartStopTeleop::Request req;
+    manipulator_teleop::StartStopTeleop::Response res;
+    ros::service::call(srv_name, req, res);
+    ros::service::waitForService(srv_name);
+  }
+}
+
 bool callbackMoveHome(manipulator_teleop::MoveHome::Request &req,
                       manipulator_teleop::MoveHome::Response &res) {
+
+  // Stop the teleop-node (STATE_TELEOP --> STATE_IDLE)
+  stop_teleop();
 
   // FIXME Velocity and acceleration limit does not seem to be working
   //       (changing it does not seem to have any effect on the robot's speed)
@@ -29,23 +57,31 @@ bool callbackMoveHome(manipulator_teleop::MoveHome::Request &req,
   move_group.setJointValueTarget(joint_angles);
   moveit::planning_interface::MoveGroupInterface::Plan plan;
 
-  bool success = (move_group.plan(plan) ==
-                  moveit::planning_interface::MoveItErrorCode::SUCCESS);
+  bool success_plan = (move_group.plan(plan) ==
+                       moveit::planning_interface::MoveItErrorCode::SUCCESS);
 
-  if (success) {
-    if (move_group.execute(plan) ==
-        moveit::planning_interface::MoveItErrorCode::SUCCESS) {
-      res.reply = 0;
-      return true;
-    } else {
-      res.reply = -1;
-      return false;
-    }
+  bool success_exec = false;
+  if (success_plan) {
+    success_exec = (move_group.execute(plan) ==
+                    moveit::planning_interface::MoveItErrorCode::SUCCESS);
+  }
+
+  // start_teleop();
+
+  if (success_exec) {
+    res.reply = 0;
+    return true;
+  } else {
+    res.reply = -1;
+    return false;
   }
 }
 
 bool callbackMoveToRPY(manipulator_teleop::MoveToRPY::Request &req,
                        manipulator_teleop::MoveToRPY::Response &res) {
+
+  // Stop the teleop-node (STATE_TELEOP --> STATE_IDLE)
+  stop_teleop();
 
   moveit::planning_interface::MoveGroupInterface move_group(PLANNING_GROUP);
   ROS_INFO("Max velocity scaling factor: %1.1f", req.max_vel_fact);
@@ -77,23 +113,29 @@ bool callbackMoveToRPY(manipulator_teleop::MoveToRPY::Request &req,
       req.pose_rpy[4], req.pose_rpy[5]);
   moveit::planning_interface::MoveGroupInterface::Plan plan;
 
-  bool success = (move_group.plan(plan) ==
-                  moveit::planning_interface::MoveItErrorCode::SUCCESS);
+  bool success_plan = (move_group.plan(plan) ==
+                       moveit::planning_interface::MoveItErrorCode::SUCCESS);
 
-  if (success) {
-    if (move_group.execute(plan) ==
-        moveit::planning_interface::MoveItErrorCode::SUCCESS) {
-      res.reply = 0;
-      return true;
-    } else {
-      res.reply = -1;
-      return false;
-    }
+  bool success_exec = false;
+  if (success_plan) {
+    success_exec = (move_group.execute(plan) ==
+                    moveit::planning_interface::MoveItErrorCode::SUCCESS);
+  }
+
+  if (success_exec) {
+    res.reply = 0;
+    return true;
+  } else {
+    res.reply = -1;
+    return false;
   }
 }
 
 bool callbackMoveToQuat(manipulator_teleop::MoveToQuat::Request &req,
                         manipulator_teleop::MoveToQuat::Response &res) {
+
+  // Stop the teleop-node (STATE_TELEOP --> STATE_IDLE)
+  stop_teleop();
 
   moveit::planning_interface::MoveGroupInterface move_group(PLANNING_GROUP);
   ROS_INFO("Max velocity scaling factor: %1.1f", req.max_vel_fact);
@@ -115,18 +157,21 @@ bool callbackMoveToQuat(manipulator_teleop::MoveToQuat::Request &req,
            req.pose_quat[6]);
   moveit::planning_interface::MoveGroupInterface::Plan plan;
 
-  bool success = (move_group.plan(plan) ==
-                  moveit::planning_interface::MoveItErrorCode::SUCCESS);
+  bool success_plan = (move_group.plan(plan) ==
+                       moveit::planning_interface::MoveItErrorCode::SUCCESS);
 
-  if (success) {
-    if (move_group.execute(plan) ==
-        moveit::planning_interface::MoveItErrorCode::SUCCESS) {
-      res.reply = 0;
-      return true;
-    } else {
-      res.reply = -1;
-      return false;
-    }
+  bool success_exec = false;
+  if (success_plan) {
+    success_exec = (move_group.execute(plan) ==
+                    moveit::planning_interface::MoveItErrorCode::SUCCESS);
+  }
+
+  if (success_exec) {
+    res.reply = 0;
+    return true;
+  } else {
+    res.reply = -1;
+    return false;
   }
 }
 
