@@ -66,7 +66,8 @@ bool callbackMoveHome(manipulator_teleop::MoveHome::Request &req,
                     moveit::planning_interface::MoveItErrorCode::SUCCESS);
   }
 
-  // start_teleop();
+  // Start the teleop-node (STATE_STOP --> STATE_TELEOP)
+  start_teleop();
 
   if (success_exec) {
     res.reply = 0;
@@ -122,6 +123,9 @@ bool callbackMoveToRPY(manipulator_teleop::MoveToRPY::Request &req,
                     moveit::planning_interface::MoveItErrorCode::SUCCESS);
   }
 
+  // Start the teleop-node (STATE_STOP --> STATE_IDLE)
+  start_teleop();
+
   if (success_exec) {
     res.reply = 0;
     return true;
@@ -165,6 +169,9 @@ bool callbackMoveToQuat(manipulator_teleop::MoveToQuat::Request &req,
     success_exec = (move_group.execute(plan) ==
                     moveit::planning_interface::MoveItErrorCode::SUCCESS);
   }
+
+  // Start the teleop-node (STATE_STOP --> STATE_IDLE)
+  start_teleop();
 
   if (success_exec) {
     res.reply = 0;

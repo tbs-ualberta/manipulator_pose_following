@@ -17,6 +17,7 @@
 bool g_do_teleop = false;
 const int STATE_IDLE = 0;
 const int STATE_TELEOP = 1;
+const int STATE_STOP = 2;
 int g_state = STATE_IDLE;
 sensor_msgs::JointState g_current_joints;
 ros::Time g_t_start, g_t_last, g_t_last_cb;
@@ -50,7 +51,8 @@ bool cb_start_teleop(manipulator_teleop::StartStopTeleop::Request &req,
 
   ROS_INFO("/teleop/start signal received.");
   g_do_teleop = true;
-  g_state = STATE_TELEOP;
+  g_state = STATE_IDLE;
+  ROS_DEBUG_NAMED("state", "STATE_STOP --> STATE_IDLE");
   res.reply = 0;
   return 0;
 }
@@ -60,7 +62,8 @@ bool cb_stop_teleop(manipulator_teleop::StartStopTeleop::Request &req,
 
   ROS_INFO("/teleop/stop signal received.");
   g_do_teleop = false;
-  g_state = STATE_IDLE;
+  g_state = STATE_STOP;
+  ROS_DEBUG_NAMED("state", "--> STATE_STOP");
   res.reply = 0;
   return 0;
 }
@@ -69,6 +72,7 @@ void cb_delta_pose_rpy(const manipulator_teleop::DeltaPoseRPY::ConstPtr &msg) {
 
   if (g_state == STATE_IDLE) {
     g_state = STATE_TELEOP;
+    ROS_DEBUG_NAMED("state", "STATE_IDLE --> STATE_TELEOP");
     g_t_start = ros::Time::now();
   }
 
@@ -152,6 +156,7 @@ void cb_pose_quat(const geometry_msgs::PoseStamped::ConstPtr &msg) {
 
   if (g_state == STATE_IDLE) {
     g_state = STATE_TELEOP;
+    ROS_DEBUG_NAMED("state", "STATE_IDLE --> STATE_TELEOP");
     g_t_start = ros::Time::now();
   }
 
@@ -301,6 +306,16 @@ int main(int argc, char **argv) {
       point.time_from_start = ros::Duration(0.0);
       break;
 
+    case STATE_STOP:   // STOP
+
+      // --- Keep track of the joint state (positions)
+      for (unsigned int joint = 0; joint < 7; joint++) {
+        point.positions.at(joint) = g_current_joints.position.at(joint);
+        point.velocities.at(joint) = 0;
+      }
+      point.time_from_start = ros::Duration(0.0);
+      break;
+
     case STATE_TELEOP: // TELEOP
 
       double dt_cb = (ros::Time::now() - g_t_last_cb).toSec();
@@ -310,6 +325,7 @@ int main(int argc, char **argv) {
           g_delta_pose.data.at(i) = 0.0;
         }
         g_state = STATE_IDLE;
+        ROS_DEBUG_NAMED("state", "STATE_TELEOP --> STATE_IDLE");
       }
 
       for (int i = 0; i < 6; i++) {
@@ -360,6 +376,7 @@ int main(int argc, char **argv) {
                    theta_d_limit);
           ROS_WARN("Changing state to STATE_IDLE.");
           g_state = STATE_IDLE;
+          ROS_DEBUG_NAMED("state", "STATE_TELEOP --> STATE_IDLE");
         }
         point.positions.at(j) = point.positions.at(j) + theta_d[j] * dt;
 
