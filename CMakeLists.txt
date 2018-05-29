@@ -64,7 +64,7 @@ add_service_files(
   MoveHome.srv
   MoveToRPY.srv
   MoveToQuat.srv
-  StartStopTeleop.srv
+  ReplyInt.srv
   SetVelocity.srv
 )
 

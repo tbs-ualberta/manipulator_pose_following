@@ -8,20 +8,22 @@
 #include "manipulator_teleop/MoveHome.h"
 #include "manipulator_teleop/MoveToQuat.h"
 #include "manipulator_teleop/MoveToRPY.h"
-#include "manipulator_teleop/StartStopTeleop.h"
+#include "manipulator_teleop/ReplyInt.h"
 
 #include <vector>
 
 static const std::string PLANNING_GROUP = "manipulator";
 geometry_msgs::Pose g_pose_ref;
+bool g_success_plan = false;
+moveit::planning_interface::MoveGroupInterface::Plan g_plan;
 
 bool start_teleop() {
   // --- Stop teleop node (STATE_TELEOP --> STATE_IDLE)
   std::string srv_name = "/teleop/start";
   bool success = ros::service::exists(srv_name, true);
   if (success) {
-    manipulator_teleop::StartStopTeleop::Request req;
-    manipulator_teleop::StartStopTeleop::Response res;
+    manipulator_teleop::ReplyInt::Request req;
+    manipulator_teleop::ReplyInt::Response res;
     ros::service::call(srv_name, req, res);
     ros::service::waitForService(srv_name);
   }
@@ -32,8 +34,8 @@ bool stop_teleop() {
   // --- Stop teleop node (STATE_TELEOP --> STATE_IDLE)
   std::string srv_name = "/teleop/stop";
   if (ros::service::exists(srv_name, true)) {
-    manipulator_teleop::StartStopTeleop::Request req;
-    manipulator_teleop::StartStopTeleop::Response res;
+    manipulator_teleop::ReplyInt::Request req;
+    manipulator_teleop::ReplyInt::Response res;
     ros::service::call(srv_name, req, res);
     ros::service::waitForService(srv_name);
   }
@@ -78,6 +80,96 @@ bool callbackMoveHome(manipulator_teleop::MoveHome::Request &req,
   }
 }
 
+bool callbackPlanToRPY(manipulator_teleop::MoveToRPY::Request &req,
+                       manipulator_teleop::MoveToRPY::Response &res){
+
+  tf::Quaternion tf_q;
+  // NOTE The below assignment for RPY is strange:
+  //      yaw -> Y, pitch -> X, roll -> Z
+  tf_q.setEuler(req.pose_rpy[4], req.pose_rpy[3], req.pose_rpy[5]);
+  geometry_msgs::Pose pose;
+  pose.position.x = req.pose_rpy[0];
+  pose.position.y = req.pose_rpy[1];
+  pose.position.z = req.pose_rpy[2];
+  pose.orientation.x = tf_q.getX();
+  pose.orientation.y = tf_q.getY();
+  pose.orientation.z = tf_q.getZ();
+  pose.orientation.w = tf_q.getW();
+
+  moveit::planning_interface::MoveGroupInterface move_group(PLANNING_GROUP);
+  move_group.setPoseTarget(pose, "link_t");
+  move_group.setMaxVelocityScalingFactor(req.max_vel_fact);
+  move_group.setMaxAccelerationScalingFactor(req.max_acc_fact);
+
+  g_success_plan = (move_group.plan(g_plan) ==
+                    moveit::planning_interface::MoveItErrorCode::SUCCESS);
+
+  if (g_success_plan) {
+    res.reply = 0;
+  } else {
+    res.reply = -1;
+  }
+  return g_success_plan;
+}
+
+bool callbackPlanToQuat(manipulator_teleop::MoveToQuat::Request &req,
+                        manipulator_teleop::MoveToQuat::Response &res) {
+
+  moveit::planning_interface::MoveGroupInterface move_group(PLANNING_GROUP);
+  ROS_INFO("Max velocity scaling factor: %1.1f", req.max_vel_fact);
+  ROS_INFO("Max acceleration scaling factor: %1.1f", req.max_acc_fact);
+
+  geometry_msgs::Pose pose;
+  pose.position.x = req.pose_quat[0];
+  pose.position.y = req.pose_quat[1];
+  pose.position.z = req.pose_quat[2];
+  pose.orientation.x = req.pose_quat[3];
+  pose.orientation.y = req.pose_quat[4];
+  pose.orientation.z = req.pose_quat[5];
+  pose.orientation.w = req.pose_quat[6];
+
+  move_group.setPoseTarget(pose, "link_t");
+  move_group.setMaxVelocityScalingFactor(req.max_vel_fact);
+  move_group.setMaxAccelerationScalingFactor(req.max_acc_fact);
+
+  g_success_plan = (move_group.plan(g_plan) ==
+                    moveit::planning_interface::MoveItErrorCode::SUCCESS);
+
+  if (g_success_plan) {
+    res.reply = 0;
+  } else {
+    res.reply = -1;
+  }
+  return g_success_plan;
+}
+
+bool callbackExecutePlan(manipulator_teleop::ReplyInt::Request &req,
+                         manipulator_teleop::ReplyInt::Response &res){
+
+  // Stop the teleop-node (STATE_TELEOP --> STATE_IDLE)
+  stop_teleop();
+
+  moveit::planning_interface::MoveGroupInterface move_group(PLANNING_GROUP);
+  bool success_exec = false;
+  ROS_DEBUG("Planned successfully: %s", (g_success_plan)?"true":"false");
+  if (g_success_plan) {
+    success_exec = (move_group.execute(g_plan) ==
+                    moveit::planning_interface::MoveItErrorCode::SUCCESS);
+  }
+  ROS_DEBUG("Executed successfully: %s", (success_exec)?"true":"false");
+
+  // Start the teleop-node (STATE_STOP --> STATE_IDLE)
+  start_teleop();
+
+  if (success_exec) {
+    res.reply = 0;
+    return true;
+  } else {
+    res.reply = -1;
+    return false;
+  }
+}
+
 bool callbackMoveToRPY(manipulator_teleop::MoveToRPY::Request &req,
                        manipulator_teleop::MoveToRPY::Response &res) {
 
@@ -88,7 +180,7 @@ bool callbackMoveToRPY(manipulator_teleop::MoveToRPY::Request &req,
   ROS_INFO("Max velocity scaling factor: %1.1f", req.max_vel_fact);
   ROS_INFO("Max acceleration scaling factor: %1.1f", req.max_acc_fact);
   tf::Quaternion tf_q;
-  tf_q.setEuler(req.pose_rpy[5], req.pose_rpy[4], req.pose_rpy[3]);
+  tf_q.setEuler(req.pose_rpy[4], req.pose_rpy[3], req.pose_rpy[5]);
   geometry_msgs::Pose pose;
   pose.position.x = req.pose_rpy[0];
   pose.position.y = req.pose_rpy[1];
@@ -99,6 +191,8 @@ bool callbackMoveToRPY(manipulator_teleop::MoveToRPY::Request &req,
   pose.orientation.w = tf_q.getW();
 
   move_group.setPoseTarget(pose, "link_t");
+  move_group.setMaxVelocityScalingFactor(req.max_vel_fact);
+  move_group.setMaxAccelerationScalingFactor(req.max_acc_fact);
 
   // NOTE There seems to be some issue with the setRPYTarget()-function of
   //      MoveGroupInterface. Supplying the same pose multiple times results in
@@ -154,6 +248,8 @@ bool callbackMoveToQuat(manipulator_teleop::MoveToQuat::Request &req,
   pose.orientation.z = req.pose_quat[5];
   pose.orientation.w = req.pose_quat[6];
   move_group.setPoseTarget(pose, "link_t");
+  move_group.setMaxVelocityScalingFactor(req.max_vel_fact);
+  move_group.setMaxAccelerationScalingFactor(req.max_acc_fact);
   ROS_INFO("Planning and executing pose goal [%1.2f %1.2f %1.2f %1.2f %1.2f "
            "%1.2f  %1.2f]",
            req.pose_quat[0], req.pose_quat[1], req.pose_quat[2],
@@ -205,13 +301,21 @@ int main(int argc, char **argv) {
   ros::AsyncSpinner spin_plan(1);
   spin_plan.start();
 
-  moveit::planning_interface::MoveGroupInterface move_group(PLANNING_GROUP);
-
   // --- Advertise services
   //     - move_home
-  //     - move_to
+  //     - plan_to_rpy
+  //     - plan_to_quat
+  //     - execute_plan
+  //     - move_to_rpy
+  //     - move_to_quat
   ros::ServiceServer srv_move_home =
       nh_move.advertiseService("/moveit_interface/move_home", callbackMoveHome);
+  ros::ServiceServer srv_plan_to_rpy = nh_move.advertiseService(
+      "/moveit_interface/plan_to_rpy", callbackPlanToRPY);
+  ros::ServiceServer srv_plan_to_quat = nh_move.advertiseService(
+      "/moveit_interface/plan_to_quat", callbackPlanToQuat);
+  ros::ServiceServer srv_exec_plan = nh_move.advertiseService(
+      "/moveit_interface/execute_plan", callbackExecutePlan);
   ros::ServiceServer srv_move_to_rpy = nh_move.advertiseService(
       "/moveit_interface/move_to_rpy", callbackMoveToRPY);
   ros::ServiceServer srv_move_to_quat = nh_move.advertiseService(

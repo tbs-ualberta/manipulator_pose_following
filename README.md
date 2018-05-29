@@ -38,23 +38,37 @@ Interface node for planning and executing trajectories using MoveIt!, and for mo
 
 
 - *Services*:
+    - `/moveit_interface/plan_to_rpy`  
+      Plans joint trajectories to reach a given end-effector pose where the orientation is given as Euler angles (RPY).  
+        - Parameters:  
+            - `pose_rpy` (`double[6]`): Desired end-effector pose with orientation as Euler angles (RPY).
+            - `max_vel_fact` (`double`): Scaling factor to reduce the maximum joint velocity [0,1]
+            - `max_acc_fact` (`double`): Scaling factor to reduce the maximum joint acceleration [0,1]
+    - `/moveit_interface/plan_to_quat`  
+      Plans joint trajectories to reach a given end-effector pose where the orientation is given as quaternions.  
+        - Parameters:  
+            - `pose_quat` (`double[7]`): Desired end-effector pose with orientation as quaternions.
+            - `max_vel_fact` (`double`): Scaling factor to reduce the maximum joint velocity [0,1]
+            - `max_acc_fact` (`double`): Scaling factor to reduce the maximum joint acceleration [0,1]
+    - `/moveit_interface/execute_plan`  
+      Executes the trajectories planned through service calls `plan_to_rpy` or `plan_to_quat`.
     - `/moveit_interface/move_home`  
       Moves the manipulator to the configuration where all joint angles are zero.
         - Parameters:
-            - `max_vel_fact` (`double`): Velocity factor of the maximum velocity [0,1]
-            - `max_acc_fact` (`double`): Acceleration factor of the maximum acceleration [0,1]
+            - `max_vel_fact` (`double`): Scaling factor to reduce the maximum joint velocity [0,1]
+            - `max_acc_fact` (`double`): Scaling factor to reduce the maximum joint acceleration [0,1]
     - `/moveit_interface/move_to_rpy`  
       Moves the end-effector to a given pose where the orientation is given as Euler angles (RPY).
         - Parameters:
-            - `pose_rpy` (`double[6]`): Desired end-effector pose as Euler angles (RPY).
-            - `max_vel_fact` (`double`): Velocity factor of the maximum velocity [0,1]
-            - `max_acc_fact` (`double`): Acceleration factor of the maximum acceleration [0,1]
+            - `pose_rpy` (`double[6]`): Desired end-effector pose with orientation as Euler angles (RPY).
+            - `max_vel_fact` (`double`): Scaling factor to reduce the maximum joint velocity [0,1]
+            - `max_acc_fact` (`double`): Scaling factor to reduce the maximum joint acceleration [0,1]
     - `/moveit_interface/move_to_quat`  
       Moves the end-effector to a given pose where the orientation is given as quaternions.
         - Parameters:
-            - `pose_rpy` (`double[7]`): Desired end-effector pose as quaternions.
-            - `max_vel_fact` (`double`): Velocity factor of the maximum velocity [0,1]
-            - `max_acc_fact` (`double`): Acceleration factor of the maximum acceleration [0,1]
+            - `pose_quat` (`double[7]`): Desired end-effector pose with orientation as quaternions.
+            - `max_vel_fact` (`double`): Scaling factor to reduce the maximum joint velocity [0,1]
+            - `max_acc_fact` (`double`): Scaling factor to reduce the maximum joint acceleration [0,1]
 
 #### `kb_jogging`:
 Node for jogging the manipulator's end-effector pose via keyboard.

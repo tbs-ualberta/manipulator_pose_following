@@ -9,7 +9,7 @@
 #include <tf/transform_datatypes.h>
 
 #include "manipulator_teleop/DeltaPoseRPY.h"
-#include "manipulator_teleop/StartStopTeleop.h"
+#include "manipulator_teleop/ReplyInt.h"
 
 #include <math.h>
 
@@ -46,8 +46,8 @@ void cb_joint_state(sensor_msgs::JointState msg) {
   g_current_joints = msg;
 }
 
-bool cb_start_teleop(manipulator_teleop::StartStopTeleop::Request &req,
-                     manipulator_teleop::StartStopTeleop::Response &res) {
+bool cb_start_teleop(manipulator_teleop::ReplyInt::Request &req,
+                     manipulator_teleop::ReplyInt::Response &res) {
 
   ROS_INFO("/teleop/start signal received.");
   g_do_teleop = true;
@@ -57,8 +57,8 @@ bool cb_start_teleop(manipulator_teleop::StartStopTeleop::Request &req,
   return 0;
 }
 
-bool cb_stop_teleop(manipulator_teleop::StartStopTeleop::Request &req,
-                    manipulator_teleop::StartStopTeleop::Response &res) {
+bool cb_stop_teleop(manipulator_teleop::ReplyInt::Request &req,
+                    manipulator_teleop::ReplyInt::Response &res) {
 
   ROS_INFO("/teleop/stop signal received.");
   g_do_teleop = false;
