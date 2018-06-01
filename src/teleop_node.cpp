@@ -372,11 +372,11 @@ int main(int argc, char **argv) {
 
       for (unsigned int j = 0; j < 7; j++) {
         if (fabs(theta_d[j]) > theta_d_limit) {
-          ROS_WARN("Angular velocity of joint %d exceeding %2.2f.", j,
+          ROS_WARN("Angular velocity of joint %d exceeding %2.2f rad/s.", j,
                    theta_d_limit);
-          ROS_WARN("Changing state to STATE_IDLE.");
-          g_state = STATE_IDLE;
-          ROS_DEBUG_NAMED("state", "STATE_TELEOP --> STATE_IDLE");
+          ROS_WARN("Changing state to STATE_STOP.");
+          g_state = STATE_STOP;
+          ROS_DEBUG_NAMED("state", "STATE_TELEOP --> STATE_STOP");
         }
         point.positions.at(j) = point.positions.at(j) + theta_d[j] * dt;
 
