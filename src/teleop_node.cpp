@@ -385,6 +385,7 @@ int main(int argc, char **argv) {
 
       point.time_from_start = ros::Time::now() - g_t_start;
       dummy_traj.points.at(0) = point;
+      dummy_traj.header.stamp = ros::Time::now();
       streaming_pub.publish(dummy_traj);
 
     } // end switch(g_state)
