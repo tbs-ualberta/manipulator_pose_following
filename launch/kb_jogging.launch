@@ -1,13 +1,20 @@
 <launch>
   <env name="ROSCONSOLE_CONFIG_FILE"
        value="$(find manipulator_teleop)/config/logger.conf"/>
+  <node pkg="manipulator_teleop" type="smooth_jogging" name="smooth_jogging"
+        output="screen">
+    <rosparam>
+      rate: 40
+    </rosparam>
+  </node>
   <node pkg="manipulator_teleop" type="kb_jogging" name="kb_jogging"
         output="screen">
     <rosparam>
-      jogging_vel: 0.1
       rate: 40
+      jogging_vel: 0.1
       max_trans_vel: 0.5
       max_rot_vel: 0.78
     </rosparam>
+    <remap from="teleop/cmd_vel" to="smooth_jogging/cmd_vel" />
   </node>
 </launch>

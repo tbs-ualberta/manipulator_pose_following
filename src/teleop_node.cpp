@@ -7,6 +7,7 @@
 #include <ros/callback_queue.h>
 #include <ros/ros.h>
 #include <tf/transform_datatypes.h>
+#include <geometry_msgs/Twist.h>
 
 #include "manipulator_teleop/DeltaPoseRPY.h"
 #include "manipulator_teleop/ReplyInt.h"
@@ -68,7 +69,7 @@ bool cb_stop_teleop(manipulator_teleop::ReplyInt::Request &req,
   return 0;
 }
 
-void cb_delta_pose_rpy(const manipulator_teleop::DeltaPoseRPY::ConstPtr &msg) {
+void cb_delta_pose_rpy(const geometry_msgs::Twist::ConstPtr &msg) {
 
   if (g_state == STATE_IDLE) {
     g_state = STATE_TELEOP;
@@ -78,14 +79,22 @@ void cb_delta_pose_rpy(const manipulator_teleop::DeltaPoseRPY::ConstPtr &msg) {
 
   g_t_last_cb = ros::Time::now();
   // Check valid deltas:
-  if (msg->data.size() != 6) {
+  /*if (msg->data.size() != 6) {
     ROS_ERROR("Delta pose must be of size 6 (position, orientation (RPY)). "
               "Ignoring message.");
     return;
-  }
+  }*/
   // TODO make 'DeltaPoseRPY' a stamped message (header) to merge the timestamp
   //      g_t_last_cb into it.
-  g_delta_pose = *msg;
+  g_delta_pose.data.clear();
+  g_delta_pose.data.resize(6, 0);
+  g_delta_pose.data.at(0) = msg->linear.x;
+  g_delta_pose.data.at(1) = msg->linear.y;
+  g_delta_pose.data.at(2) = msg->linear.z;
+  g_delta_pose.data.at(3) = msg->angular.x;
+  g_delta_pose.data.at(4) = msg->angular.y;
+  g_delta_pose.data.at(5) = msg->angular.z;
+  //g_delta_pose = *msg;
 }
 
 manipulator_teleop::DeltaPoseRPY calc_dpose(geometry_msgs::PoseStamped pose) {
@@ -199,7 +208,7 @@ int main(int argc, char **argv) {
 
   // --- Setup topic subscritions
   ros::Subscriber sub_dpose =
-      nh_teleop.subscribe("teleop/delta_pose_rpy", 1, cb_delta_pose_rpy);
+      nh_teleop.subscribe("teleop/cmd_vel", 1, cb_delta_pose_rpy);
   ros::Subscriber sub_pose =
       nh_pose_quat.subscribe("teleop/pose", 1, cb_pose_quat);
   ros::Subscriber sub_joint =

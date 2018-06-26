@@ -149,6 +149,7 @@ include_directories(
 add_executable(test_traject src/test_traject_node.cpp)
 add_executable(moveit_interface src/moveit_interface_node.cpp)
 add_executable(teleop src/teleop_node.cpp)
+add_executable(smooth_jogging src/smooth_jogging_node.cpp)
 add_executable(kb_jogging src/kb_jogging_node.cpp)
 
 ## Rename C++ executable without prefix
@@ -171,10 +172,13 @@ target_link_libraries(moveit_interface
 target_link_libraries(teleop
   ${catkin_LIBRARIES}
 )
+target_link_libraries(smooth_jogging
+  ${catkin_LIBRARIES}
+  ${Eigen_LIBRARIES}
+)
 target_link_libraries(kb_jogging
   ${catkin_LIBRARIES}
   ncurses
-  ${Eigen_LIBRARIES}
 )
 
 #############

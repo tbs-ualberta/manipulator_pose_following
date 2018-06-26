@@ -7,21 +7,21 @@ The main node facilitating teleoperation.
 
 
 - *Subscribed topics*:  
-    - `teleop/delta_pose_rpy` - (manipulator_teleop/DeltaPoseRPY)  
-      The pose derivative in Euler angles (RPY).  
+    - `teleop/cmd_vel` - (geometry_msgs/Twist)  
+      The pose derivative expressed as twist.  
     - `teleop/pose` - (geometry_msgs/PoseStamped)  
       The current pose of the device used for teleoperation. The pose derivative is calculated internally.
     - `joint_states` - (sensor_msgs/JointState)  
       The current joint states of the manipulator.  
-- *Published topics*:
+- *Published topics*:  
     - `joint_command` - (trajectory_msgs/JointTrajectory)  
       See http://wiki.ros.org/Industrial/Industrial_Robot_Driver_Spec  
-- *Services*:
+- *Services*:  
     - `/teleop/start`  
       Enables the node to accept pose or pose derivative messages.  
     - `/teleop/stop`  
       Sets the node to an idle state where pose or pose derivative messages are ignored.  
-- *Parameters*:
+- *Parameters*:  
     - `rate` - (`int`, default: 100) [Hz]  
       The node's sampling rate  
     - `group` - (`string`, default: 'manipulator')  
@@ -37,7 +37,7 @@ The main node facilitating teleoperation.
 Interface node for planning and executing trajectories using MoveIt!, and for moving the manipulator's end-effector to desired poses and pre-definded configurations (e.g., home position) from which to begin teleoperation.
 
 
-- *Services*:
+- *Services*:  
     - `/moveit_interface/plan_to_rpy`  
       Plans joint trajectories to reach a given end-effector pose where the orientation is given as Euler angles (RPY).  
         - Parameters:  
@@ -89,11 +89,24 @@ Node for jogging the manipulator's end-effector pose via keyboard.
       Stop:          "x"
     ```
 
-- *Published topics*:
-    - `teleop/delta_pose_rpy` - (manipulator_teleop/DeltaPoseRPY)  
-      The pose derivative in Euler angles (RPY).
-- *Parameters*:
-    - `jogging_vel` - (`double`, default: 0.1): Velocity adjustment factor [0,1]
+- *Published topics*:  
+    - `teleop/cmd_vel` - (geometry_msgs/Twist)    
+      The pose derivative expressed as twist.
+- *Parameters*:  
     - `rate` - (`int`, default: 40): Node loop rate [Hz]
+    - `jogging_vel` - (`double`, default: 0.1): Velocity adjustment factor [0,1]
     - `max_trans_vel` - (`double`, default: 0.5): Maximum translational end-effector velocity [m/s]
     - `max_rot_vel` - (`double`, default: 1): Maximum rotational end-effector velocity [rad/s]
+
+#### `smooth_jogging`:    
+Node for smoothing of velocity step changes created by e.g., keyboard input.
+
+
+- *Subscribed topics*:  
+    - `smooth_jogging/cmd_vel` - (geometry_msgs/Twist)  
+      The pose derivative expressed as twist.
+- *Published topics*:  
+    - `teleop/cmd_vel` - (geometry_msgs/Twist)  
+      The pose derivative expressed as twist.
+- *Parameters*:
+    - `rate` - (`int`, default: 40): Node loop rate [Hz]
