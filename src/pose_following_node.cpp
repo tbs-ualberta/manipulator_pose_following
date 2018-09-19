@@ -1,5 +1,6 @@
 
 #include <geometry_msgs/PoseStamped.h>
+#include <geometry_msgs/Twist.h>
 #include <moveit/move_group_interface/move_group_interface.h>
 #include <moveit/robot_model/robot_model.h>
 #include <moveit/robot_model_loader/robot_model_loader.h>
@@ -7,23 +8,22 @@
 #include <ros/callback_queue.h>
 #include <ros/ros.h>
 #include <tf/transform_datatypes.h>
-#include <geometry_msgs/Twist.h>
 
-#include "manipulator_teleop/DeltaPoseRPY.h"
-#include "manipulator_teleop/ReplyInt.h"
+#include "manipulator_pose_following/DeltaPoseRPY.h"
+#include "manipulator_pose_following/ReplyInt.h"
 
 #include <math.h>
 
 // --- Globals
-bool g_do_teleop = false;
+bool g_do_pose_following = false;
 const int STATE_IDLE = 0;
-const int STATE_TELEOP = 1;
+const int STATE_POSE_FOLLOW = 1;
 const int STATE_STOP = 2;
 int g_state = STATE_IDLE;
 sensor_msgs::JointState g_current_joints;
 ros::Time g_t_start, g_t_last, g_t_last_cb;
 // TODO Make below message a stamped one
-manipulator_teleop::DeltaPoseRPY g_delta_pose;
+manipulator_pose_following::DeltaPoseRPY g_delta_pose;
 geometry_msgs::PoseStamped g_pose, g_pose_last;
 
 Eigen::MatrixXd p_inverse(Eigen::MatrixXd J) {
@@ -47,22 +47,24 @@ void cb_joint_state(sensor_msgs::JointState msg) {
   g_current_joints = msg;
 }
 
-bool cb_start_teleop(manipulator_teleop::ReplyInt::Request &req,
-                     manipulator_teleop::ReplyInt::Response &res) {
+bool cb_start_pose_following(
+    manipulator_pose_following::ReplyInt::Request &req,
+    manipulator_pose_following::ReplyInt::Response &res) {
 
-  ROS_INFO("/teleop/start signal received.");
-  g_do_teleop = true;
+  ROS_INFO("/pose_following/start signal received.");
+  g_do_pose_following = true;
   g_state = STATE_IDLE;
   ROS_DEBUG_NAMED("state", "STATE_STOP --> STATE_IDLE");
   res.reply = 0;
   return 0;
 }
 
-bool cb_stop_teleop(manipulator_teleop::ReplyInt::Request &req,
-                    manipulator_teleop::ReplyInt::Response &res) {
+bool cb_stop_pose_following(
+    manipulator_pose_following::ReplyInt::Request &req,
+    manipulator_pose_following::ReplyInt::Response &res) {
 
-  ROS_INFO("/teleop/stop signal received.");
-  g_do_teleop = false;
+  ROS_INFO("/pose_following/stop signal received.");
+  g_do_pose_following = false;
   g_state = STATE_STOP;
   ROS_DEBUG_NAMED("state", "--> STATE_STOP");
   res.reply = 0;
@@ -72,8 +74,8 @@ bool cb_stop_teleop(manipulator_teleop::ReplyInt::Request &req,
 void cb_delta_pose_rpy(const geometry_msgs::Twist::ConstPtr &msg) {
 
   if (g_state == STATE_IDLE) {
-    g_state = STATE_TELEOP;
-    ROS_DEBUG_NAMED("state", "STATE_IDLE --> STATE_TELEOP");
+    g_state = STATE_POSE_FOLLOW;
+    ROS_DEBUG_NAMED("state", "STATE_IDLE --> STATE_POSE_FOLLOW");
     g_t_start = ros::Time::now();
   }
 
@@ -94,18 +96,19 @@ void cb_delta_pose_rpy(const geometry_msgs::Twist::ConstPtr &msg) {
   g_delta_pose.data.at(3) = msg->angular.x;
   g_delta_pose.data.at(4) = msg->angular.y;
   g_delta_pose.data.at(5) = msg->angular.z;
-  //g_delta_pose = *msg;
+  // g_delta_pose = *msg;
 }
 
-manipulator_teleop::DeltaPoseRPY calc_dpose(geometry_msgs::PoseStamped pose) {
+manipulator_pose_following::DeltaPoseRPY
+calc_dpose(geometry_msgs::PoseStamped pose) {
 
   ROS_DEBUG_STREAM_NAMED("stream_calc_dpose", "calc_dpose:pose: \n" << pose);
 
   ros::Time t_start = ros::Time::now();
   // TODO the initial |dt| might be really hight -> add a check on it
   double dt = 0;
-  manipulator_teleop::DeltaPoseRPY delta_pose;
-  manipulator_teleop::DeltaPoseRPY pose_rpy, pose_rpy_last;
+  manipulator_pose_following::DeltaPoseRPY delta_pose;
+  manipulator_pose_following::DeltaPoseRPY pose_rpy, pose_rpy_last;
   pose_rpy.data.resize(6, 0);
   pose_rpy_last.data.resize(6, 0);
   delta_pose.data.resize(6, 0);
@@ -164,8 +167,8 @@ manipulator_teleop::DeltaPoseRPY calc_dpose(geometry_msgs::PoseStamped pose) {
 void cb_pose_quat(const geometry_msgs::PoseStamped::ConstPtr &msg) {
 
   if (g_state == STATE_IDLE) {
-    g_state = STATE_TELEOP;
-    ROS_DEBUG_NAMED("state", "STATE_IDLE --> STATE_TELEOP");
+    g_state = STATE_POSE_FOLLOW;
+    ROS_DEBUG_NAMED("state", "STATE_IDLE --> STATE_POSE_FOLLOW");
     g_t_start = ros::Time::now();
   }
 
@@ -176,17 +179,17 @@ void cb_pose_quat(const geometry_msgs::PoseStamped::ConstPtr &msg) {
 int main(int argc, char **argv) {
 
   // --- Initializations
-  ros::init(argc, argv, "teleop");
+  ros::init(argc, argv, "pose_following");
 
   // --- Setup node handles for
-  //     - teleoperation callbacks
+  //     - pose_following callbacks
   //     - start and stop service callbacks
-  ros::NodeHandle nh_teleop;
+  ros::NodeHandle nh_pose_following;
   ros::NodeHandle nh_startstop;
   ros::NodeHandle nh_pose_quat;
 
   // --- Setup custom callback queues for
-  //     - start_teleop and stop_teleop callbacks
+  //     - start_pose_following and stop_pose_following callbacks
   //     - pose callback
   ros::CallbackQueue queue_startstop;
   nh_startstop.setCallbackQueue(&queue_startstop);
@@ -194,7 +197,7 @@ int main(int argc, char **argv) {
   nh_pose_quat.setCallbackQueue(&queue_pose_quat);
 
   // --- Start an AsyncSpinner with one thread for calls to services
-  //     'start_teleop' and 'stop_teleop'.
+  //     'start_pose_following' and 'stop_pose_following'.
   // TODO does this thread need to be stopped when main() is left?
   ros::AsyncSpinner spin_startstop(1, &queue_startstop);
   spin_startstop.start();
@@ -203,41 +206,41 @@ int main(int argc, char **argv) {
 
   // --- Setup publishers
   ros::Publisher streaming_pub =
-      nh_teleop.advertise<trajectory_msgs::JointTrajectory>("joint_command",
-                                                            10);
+      nh_pose_following.advertise<trajectory_msgs::JointTrajectory>(
+          "joint_command", 10);
 
   // --- Setup topic subscritions
-  ros::Subscriber sub_dpose =
-      nh_teleop.subscribe("teleop/cmd_vel", 1, cb_delta_pose_rpy);
+  ros::Subscriber sub_dpose = nh_pose_following.subscribe(
+      "pose_following/cmd_vel", 1, cb_delta_pose_rpy);
   ros::Subscriber sub_pose =
-      nh_pose_quat.subscribe("teleop/pose", 1, cb_pose_quat);
+      nh_pose_quat.subscribe("pose_following/pose", 1, cb_pose_quat);
   ros::Subscriber sub_joint =
-      nh_teleop.subscribe("joint_states", 1, cb_joint_state);
+      nh_pose_following.subscribe("joint_states", 1, cb_joint_state);
 
   // --- Advertise services
-  //     - start: Changes state to STATE_TELEOP
+  //     - start: Changes state to STATE_POSE_FOLLOW
   //     - stop: Changes state to STATE_IDLE
   //     - set_velocity: Sets the jogging velocity factor
-  ros::ServiceServer srv_start =
-      nh_startstop.advertiseService("/teleop/start", cb_start_teleop);
-  ros::ServiceServer srv_stop =
-      nh_teleop.advertiseService("/teleop/stop", cb_stop_teleop);
+  ros::ServiceServer srv_start = nh_startstop.advertiseService(
+      "/pose_following/start", cb_start_pose_following);
+  ros::ServiceServer srv_stop = nh_pose_following.advertiseService(
+      "/pose_following/stop", cb_stop_pose_following);
 
   // --- Obtain parameters
   int rate_hz = 100;
-  nh_teleop.getParam("teleop/rate", rate_hz);
+  nh_pose_following.getParam("pose_following/rate", rate_hz);
   ros::Rate loop_rate(rate_hz);
 
   std::string group_st = "manipulator";
-  nh_teleop.getParam("teleop/group", group_st);
+  nh_pose_following.getParam("pose_following/group", group_st);
 
   double w0 = 0.1;
-  nh_teleop.getParam("teleop/w0", w0);
+  nh_pose_following.getParam("pose_following/w0", w0);
   double k0 = 0.001;
-  nh_teleop.getParam("teleop/k0", k0);
+  nh_pose_following.getParam("pose_following/k0", k0);
 
   double theta_d_limit = 3.14;
-  nh_teleop.getParam("teleop/theta_d_lim", theta_d_limit);
+  nh_pose_following.getParam("pose_following/theta_d_lim", theta_d_limit);
 
   // --- Setup MoveIt interface
   moveit::planning_interface::MoveGroupInterface arm(group_st);
@@ -315,7 +318,7 @@ int main(int argc, char **argv) {
       point.time_from_start = ros::Duration(0.0);
       break;
 
-    case STATE_STOP:   // STOP
+    case STATE_STOP: // STOP
 
       // --- Keep track of the joint state (positions)
       for (unsigned int joint = 0; joint < 7; joint++) {
@@ -325,7 +328,7 @@ int main(int argc, char **argv) {
       point.time_from_start = ros::Duration(0.0);
       break;
 
-    case STATE_TELEOP: // TELEOP
+    case STATE_POSE_FOLLOW: // POSE_FOLLOW
 
       double dt_cb = (ros::Time::now() - g_t_last_cb).toSec();
       if (dt_cb > 4 * (1 / (double)rate_hz)) {
@@ -334,7 +337,7 @@ int main(int argc, char **argv) {
           g_delta_pose.data.at(i) = 0.0;
         }
         g_state = STATE_IDLE;
-        ROS_DEBUG_NAMED("state", "STATE_TELEOP --> STATE_IDLE");
+        ROS_DEBUG_NAMED("state", "STATE_POSE_FOLLOW --> STATE_IDLE");
       }
 
       for (int i = 0; i < 6; i++) {
@@ -385,7 +388,7 @@ int main(int argc, char **argv) {
                    theta_d_limit);
           ROS_WARN("Changing state to STATE_STOP.");
           g_state = STATE_STOP;
-          ROS_DEBUG_NAMED("state", "STATE_TELEOP --> STATE_STOP");
+          ROS_DEBUG_NAMED("state", "STATE_POSE_FOLLOW --> STATE_STOP");
         }
         point.positions.at(j) = point.positions.at(j) + theta_d[j] * dt;
 

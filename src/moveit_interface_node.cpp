@@ -1,14 +1,13 @@
-
 #include <moveit/move_group_interface/move_group_interface.h>
 #include <ros/callback_queue.h>
 #include <ros/ros.h>
 
 #include <tf/tf.h>
 
-#include "manipulator_teleop/MoveHome.h"
-#include "manipulator_teleop/MoveToQuat.h"
-#include "manipulator_teleop/MoveToRPY.h"
-#include "manipulator_teleop/ReplyInt.h"
+#include "manipulator_pose_following/MoveHome.h"
+#include "manipulator_pose_following/MoveToQuat.h"
+#include "manipulator_pose_following/MoveToRPY.h"
+#include "manipulator_pose_following/ReplyInt.h"
 
 #include <vector>
 
@@ -17,35 +16,35 @@ geometry_msgs::Pose g_pose_ref;
 bool g_success_plan = false;
 moveit::planning_interface::MoveGroupInterface::Plan g_plan;
 
-bool start_teleop() {
-  // --- Stop teleop node (STATE_TELEOP --> STATE_IDLE)
-  std::string srv_name = "/teleop/start";
+bool start_pose_following() {
+  // --- Stop pose_following node (STATE_POSE_FOLLOW --> STATE_IDLE)
+  std::string srv_name = "/pose_following/start";
   bool success = ros::service::exists(srv_name, true);
   if (success) {
-    manipulator_teleop::ReplyInt::Request req;
-    manipulator_teleop::ReplyInt::Response res;
+    manipulator_pose_following::ReplyInt::Request req;
+    manipulator_pose_following::ReplyInt::Response res;
     ros::service::call(srv_name, req, res);
     ros::service::waitForService(srv_name);
   }
   return success;
 }
 
-bool stop_teleop() {
-  // --- Stop teleop node (STATE_TELEOP --> STATE_IDLE)
-  std::string srv_name = "/teleop/stop";
+bool stop_pose_following() {
+  // --- Stop pose_following node (STATE_POSE_FOLLOW --> STATE_IDLE)
+  std::string srv_name = "/pose_following/stop";
   if (ros::service::exists(srv_name, true)) {
-    manipulator_teleop::ReplyInt::Request req;
-    manipulator_teleop::ReplyInt::Response res;
+    manipulator_pose_following::ReplyInt::Request req;
+    manipulator_pose_following::ReplyInt::Response res;
     ros::service::call(srv_name, req, res);
     ros::service::waitForService(srv_name);
   }
 }
 
-bool callbackMoveHome(manipulator_teleop::MoveHome::Request &req,
-                      manipulator_teleop::MoveHome::Response &res) {
+bool callbackMoveHome(manipulator_pose_following::MoveHome::Request &req,
+                      manipulator_pose_following::MoveHome::Response &res) {
 
-  // Stop the teleop-node (STATE_TELEOP --> STATE_IDLE)
-  stop_teleop();
+  // Stop the pose_following-node (STATE_POSE_FOLLOW --> STATE_IDLE)
+  stop_pose_following();
 
   // FIXME Velocity and acceleration limit does not seem to be working
   //       (changing it does not seem to have any effect on the robot's speed)
@@ -68,8 +67,8 @@ bool callbackMoveHome(manipulator_teleop::MoveHome::Request &req,
                     moveit::planning_interface::MoveItErrorCode::SUCCESS);
   }
 
-  // Start the teleop-node (STATE_STOP --> STATE_TELEOP)
-  start_teleop();
+  // Start the pose_following-node (STATE_STOP --> STATE_POSE_FOLLOW)
+  start_pose_following();
 
   if (success_exec) {
     res.reply = 0;
@@ -80,8 +79,8 @@ bool callbackMoveHome(manipulator_teleop::MoveHome::Request &req,
   }
 }
 
-bool callbackPlanToRPY(manipulator_teleop::MoveToRPY::Request &req,
-                       manipulator_teleop::MoveToRPY::Response &res){
+bool callbackPlanToRPY(manipulator_pose_following::MoveToRPY::Request &req,
+                       manipulator_pose_following::MoveToRPY::Response &res) {
 
   tf::Quaternion tf_q;
   // NOTE The below assignment for RPY is strange:
@@ -112,8 +111,8 @@ bool callbackPlanToRPY(manipulator_teleop::MoveToRPY::Request &req,
   return g_success_plan;
 }
 
-bool callbackPlanToQuat(manipulator_teleop::MoveToQuat::Request &req,
-                        manipulator_teleop::MoveToQuat::Response &res) {
+bool callbackPlanToQuat(manipulator_pose_following::MoveToQuat::Request &req,
+                        manipulator_pose_following::MoveToQuat::Response &res) {
 
   moveit::planning_interface::MoveGroupInterface move_group(PLANNING_GROUP);
   ROS_INFO("Max velocity scaling factor: %1.1f", req.max_vel_fact);
@@ -143,23 +142,23 @@ bool callbackPlanToQuat(manipulator_teleop::MoveToQuat::Request &req,
   return g_success_plan;
 }
 
-bool callbackExecutePlan(manipulator_teleop::ReplyInt::Request &req,
-                         manipulator_teleop::ReplyInt::Response &res){
+bool callbackExecutePlan(manipulator_pose_following::ReplyInt::Request &req,
+                         manipulator_pose_following::ReplyInt::Response &res) {
 
-  // Stop the teleop-node (STATE_TELEOP --> STATE_IDLE)
-  stop_teleop();
+  // Stop the pose_following-node (STATE_POSE_FOLLOW --> STATE_IDLE)
+  stop_pose_following();
 
   moveit::planning_interface::MoveGroupInterface move_group(PLANNING_GROUP);
   bool success_exec = false;
-  ROS_DEBUG("Planned successfully: %s", (g_success_plan)?"true":"false");
+  ROS_DEBUG("Planned successfully: %s", (g_success_plan) ? "true" : "false");
   if (g_success_plan) {
     success_exec = (move_group.execute(g_plan) ==
                     moveit::planning_interface::MoveItErrorCode::SUCCESS);
   }
-  ROS_DEBUG("Executed successfully: %s", (success_exec)?"true":"false");
+  ROS_DEBUG("Executed successfully: %s", (success_exec) ? "true" : "false");
 
-  // Start the teleop-node (STATE_STOP --> STATE_IDLE)
-  start_teleop();
+  // Start the pose_following-node (STATE_STOP --> STATE_IDLE)
+  start_pose_following();
 
   if (success_exec) {
     res.reply = 0;
@@ -170,11 +169,11 @@ bool callbackExecutePlan(manipulator_teleop::ReplyInt::Request &req,
   }
 }
 
-bool callbackMoveToRPY(manipulator_teleop::MoveToRPY::Request &req,
-                       manipulator_teleop::MoveToRPY::Response &res) {
+bool callbackMoveToRPY(manipulator_pose_following::MoveToRPY::Request &req,
+                       manipulator_pose_following::MoveToRPY::Response &res) {
 
-  // Stop the teleop-node (STATE_TELEOP --> STATE_IDLE)
-  stop_teleop();
+  // Stop the pose_following-node (STATE_POSE_FOLLOW --> STATE_IDLE)
+  stop_pose_following();
 
   moveit::planning_interface::MoveGroupInterface move_group(PLANNING_GROUP);
   ROS_INFO("Max velocity scaling factor: %1.1f", req.max_vel_fact);
@@ -217,8 +216,8 @@ bool callbackMoveToRPY(manipulator_teleop::MoveToRPY::Request &req,
                     moveit::planning_interface::MoveItErrorCode::SUCCESS);
   }
 
-  // Start the teleop-node (STATE_STOP --> STATE_IDLE)
-  start_teleop();
+  // Start the pose_following-node (STATE_STOP --> STATE_IDLE)
+  start_pose_following();
 
   if (success_exec) {
     res.reply = 0;
@@ -229,11 +228,11 @@ bool callbackMoveToRPY(manipulator_teleop::MoveToRPY::Request &req,
   }
 }
 
-bool callbackMoveToQuat(manipulator_teleop::MoveToQuat::Request &req,
-                        manipulator_teleop::MoveToQuat::Response &res) {
+bool callbackMoveToQuat(manipulator_pose_following::MoveToQuat::Request &req,
+                        manipulator_pose_following::MoveToQuat::Response &res) {
 
-  // Stop the teleop-node (STATE_TELEOP --> STATE_IDLE)
-  stop_teleop();
+  // Stop the pose_following-node (STATE_POSE_FOLLOW --> STATE_IDLE)
+  stop_pose_following();
 
   moveit::planning_interface::MoveGroupInterface move_group(PLANNING_GROUP);
   ROS_INFO("Max velocity scaling factor: %1.1f", req.max_vel_fact);
@@ -266,8 +265,8 @@ bool callbackMoveToQuat(manipulator_teleop::MoveToQuat::Request &req,
                     moveit::planning_interface::MoveItErrorCode::SUCCESS);
   }
 
-  // Start the teleop-node (STATE_STOP --> STATE_IDLE)
-  start_teleop();
+  // Start the pose_following-node (STATE_STOP --> STATE_IDLE)
+  start_pose_following();
 
   if (success_exec) {
     res.reply = 0;

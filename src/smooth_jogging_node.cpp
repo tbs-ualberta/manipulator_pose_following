@@ -2,8 +2,8 @@
 #include <ros/callback_queue.h>
 #include <ros/ros.h>
 
-#include "manipulator_teleop/DeltaPoseRPY.h"
-#include "manipulator_teleop/SetVelocity.h"
+#include "manipulator_pose_following/DeltaPoseRPY.h"
+#include "manipulator_pose_following/SetVelocity.h"
 
 #include <Eigen/Dense>
 
@@ -11,7 +11,7 @@
 double g_max_translat_acc, g_translat_acc;
 double g_max_rot_acc, g_rot_acc;
 ros::Time g_t_start, g_t_last;
-manipulator_teleop::DeltaPoseRPY g_dof;
+manipulator_pose_following::DeltaPoseRPY g_dof;
 
 void cb_cmd_vel_fct(const geometry_msgs::Twist::ConstPtr &msg) {
   // Clear the dof.
@@ -31,7 +31,7 @@ int main(int argc, char **argv) {
   ros::NodeHandle n;
 
   ros::Publisher cmd_vel_pub =
-      n.advertise<geometry_msgs::Twist>("teleop/cmd_vel", 1);
+      n.advertise<geometry_msgs::Twist>("pose_following/cmd_vel", 1);
   ros::Subscriber cmd_vel_sub =
       n.subscribe("smooth_jogging/cmd_vel", 1, cb_cmd_vel_fct);
 
@@ -117,7 +117,7 @@ int main(int argc, char **argv) {
     if (cart_vel.norm() == 0)
       cart_vel.setZero();
 
-    manipulator_teleop::DeltaPoseRPY delta_pose;
+    manipulator_pose_following::DeltaPoseRPY delta_pose;
     delta_pose.data.resize(6, 0);
     for (int i = 0; i < 6; i++) {
       delta_pose.data[i] = cart_vel[i];

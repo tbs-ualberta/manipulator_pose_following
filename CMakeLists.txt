@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 2.8.3)
-project(manipulator_teleop)
+project(manipulator_pose_following)
 
 ## Compile as C++11, supported in ROS Kinetic and newer
 add_compile_options(-std=c++11)
@@ -112,7 +112,7 @@ generate_messages(
 ## DEPENDS: system dependencies of this project that dependent projects also need
 catkin_package(
 #  INCLUDE_DIRS include
-#  LIBRARIES manipulator_teleop
+#  LIBRARIES manipulator_pose_following
   CATKIN_DEPENDS
     roscpp
     moveit_core
@@ -135,7 +135,7 @@ include_directories(
 
 ## Declare a C++ library
 # add_library(${PROJECT_NAME}
-#   src/${PROJECT_NAME}/manipulator_teleop.cpp
+#   src/${PROJECT_NAME}/manipulator_pose_following.cpp
 # )
 
 ## Add cmake target dependencies of the library
@@ -148,7 +148,7 @@ include_directories(
 ## The recommended prefix ensures that target names across packages don't collide
 add_executable(test_traject src/test_traject_node.cpp)
 add_executable(moveit_interface src/moveit_interface_node.cpp)
-add_executable(teleop src/teleop_node.cpp)
+add_executable(pose_following src/pose_following_node.cpp)
 add_executable(smooth_jogging src/smooth_jogging_node.cpp)
 add_executable(kb_jogging src/kb_jogging_node.cpp)
 
@@ -169,7 +169,7 @@ target_link_libraries(test_traject
 target_link_libraries(moveit_interface
   ${catkin_LIBRARIES}
 )
-target_link_libraries(teleop
+target_link_libraries(pose_following
   ${catkin_LIBRARIES}
 )
 target_link_libraries(smooth_jogging

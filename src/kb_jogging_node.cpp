@@ -20,7 +20,7 @@ int main(int argc, char **argv) {
   ros::NodeHandle n;
 
   ros::Publisher cmd_vel_fct_pub =
-      n.advertise<geometry_msgs::Twist>("teleop/cmd_vel", 1);
+      n.advertise<geometry_msgs::Twist>("pose_following/cmd_vel", 1);
 
   // --- Get params from parameter server
   g_jogging_velocity = 0.1;
@@ -43,7 +43,7 @@ int main(int argc, char **argv) {
     cart_rotation_vel = max_cart_rotation_vel;
   }
 
-  ROS_INFO("Keyboard teleop online.");
+  ROS_INFO("Keyboard jogging online.");
   ROS_INFO_STREAM("\n"
                   << "\n"
                   << "Key assignments:\n"

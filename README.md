@@ -1,25 +1,27 @@
-This package implements methods for teleoperation of manipulators (e.g., articulated arms) and utility interfaces to move the manipulator to a desired end-effector pose.
+This package implements methods for pose-following of manipulators (e.g., articulated arms) where the end-effector of a manipulator follows a given pose stream (e.g., from a haptic interface). The package also includes utility interfaces to move the manipulator to a desired end-effector pose through services.
+
+The package can be used for example to teleoperate a manipulator using a haptic interface or other device.
 
 ### Nodes:
 
-#### `teleop`:
-The main node facilitating teleoperation.  
+#### `pose_following`:
+The main node facilitating pose-following.  
 
 
 - *Subscribed topics*:  
-    - `teleop/cmd_vel` - (geometry_msgs/Twist)  
+    - `pose_following/cmd_vel` - (geometry_msgs/Twist)  
       The pose derivative expressed as twist.  
-    - `teleop/pose` - (geometry_msgs/PoseStamped)  
-      The current pose of the device used for teleoperation. The pose derivative is calculated internally.
+    - `pose_following/pose` - (geometry_msgs/PoseStamped)  
+      The current pose of the device used for pose-following. The pose derivative is calculated internally.
     - `joint_states` - (sensor_msgs/JointState)  
       The current joint states of the manipulator.  
 - *Published topics*:  
     - `joint_command` - (trajectory_msgs/JointTrajectory)  
       See http://wiki.ros.org/Industrial/Industrial_Robot_Driver_Spec  
 - *Services*:  
-    - `/teleop/start`  
+    - `/pose_following/start`  
       Enables the node to accept pose or pose derivative messages.  
-    - `/teleop/stop`  
+    - `/pose_following/stop`  
       Sets the node to an idle state where pose or pose derivative messages are ignored.  
 - *Parameters*:  
     - `rate` - (`int`, default: 100) [Hz]  
@@ -34,7 +36,7 @@ The main node facilitating teleoperation.
       Joint velocity limit threshold. If exceeded, the node's state changes to idle.  
 
 #### `moveit_interface`:
-Interface node for planning and executing trajectories using MoveIt!, and for moving the manipulator's end-effector to desired poses and pre-definded configurations (e.g., home position) from which to begin teleoperation.
+Interface node for planning and executing trajectories using MoveIt!, and for moving the manipulator's end-effector to desired poses and pre-definded configurations (e.g., home position) from which to begin pose-following.
 
 
 - *Services*:  
@@ -90,7 +92,7 @@ Node for jogging the manipulator's end-effector pose via keyboard.
     ```
 
 - *Published topics*:  
-    - `teleop/cmd_vel` - (geometry_msgs/Twist)    
+    - `pose_following/cmd_vel` - (geometry_msgs/Twist)    
       The pose derivative expressed as twist.
 - *Parameters*:  
     - `rate` - (`int`, default: 40): Node loop rate [Hz]
@@ -106,7 +108,7 @@ Node for smoothing of velocity step changes created by e.g., keyboard input.
     - `smooth_jogging/cmd_vel` - (geometry_msgs/Twist)  
       The pose derivative expressed as twist.
 - *Published topics*:  
-    - `teleop/cmd_vel` - (geometry_msgs/Twist)  
+    - `pose_following/cmd_vel` - (geometry_msgs/Twist)  
       The pose derivative expressed as twist.
 - *Parameters*:
     - `rate` - (`int`, default: 40): Node loop rate [Hz]

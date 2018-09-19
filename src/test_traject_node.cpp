@@ -1,8 +1,8 @@
 
 #include <cmath>
-#include <ros/ros.h>
 #include <geometry_msgs/Pose.h>
 #include <geometry_msgs/PoseStamped.h>
+#include <ros/ros.h>
 
 #define _USE_MATH_DEFINES
 
@@ -14,8 +14,8 @@ int main(int argc, char **argv) {
   ros::init(argc, argv, "test_traject");
   ros::NodeHandle node_handle;
 
-  ros::Publisher pub_pose =
-      node_handle.advertise<geometry_msgs::PoseStamped>("teleop/pose", 1);
+  ros::Publisher pub_pose = node_handle.advertise<geometry_msgs::PoseStamped>(
+      "pose_following/pose", 1);
 
   // --- Obtain parameters ---
   int rate_hz = 100;
@@ -53,19 +53,16 @@ int main(int argc, char **argv) {
       pos_ref[1] = amp * sin(2 * M_PI * t_now_d / t_period);
       break;
     case TRAJ_2:
-      if (t_now_d < 1){
+      if (t_now_d < 1) {
         a_ref[0] = a;
         ROS_DEBUG("Accelerating: a = %1.0f", a_ref[0]);
-      }
-      else if (t_now_d >= 1 && t_now_d < 2){
+      } else if (t_now_d >= 1 && t_now_d < 2) {
         ROS_DEBUG("Constant velocity. a = %1.0f", a_ref[0]);
         a_ref[0] = 0;
-      }
-      else if (t_now_d >= 2 && t_now_d < 3){
+      } else if (t_now_d >= 2 && t_now_d < 3) {
         a_ref[0] = -a;
         ROS_DEBUG("Decelerating: a = %1.0f", a_ref[0]);
-      }
-      else if (t_now_d >= 3){
+      } else if (t_now_d >= 3) {
         a_ref[0] = 0;
         ROS_DEBUG("Stopped");
       }

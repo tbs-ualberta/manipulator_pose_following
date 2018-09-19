@@ -1,10 +1,11 @@
 <launch>
   <env name="ROSCONSOLE_CONFIG_FILE"
        value="$(find manipulator_pose_following)/config/logger.conf"/>
+  <include file="$(find manipulator_pose_following)/launch/pose_following.launch" />
   <node pkg="manipulator_pose_following" type="test_traject" name="test_traject"
         output="screen">
     <rosparam>
-      rate: 100
+      rate: 40
     </rosparam>
     <remap from="pose" to="pose_following/pose" />
   </node>
