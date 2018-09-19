@@ -16,6 +16,7 @@
 
 // --- Globals
 bool g_do_pose_following = false;
+bool g_use_orientation = true;
 const int STATE_IDLE = 0;
 const int STATE_POSE_FOLLOW = 1;
 const int STATE_STOP = 2;
@@ -144,7 +145,12 @@ calc_dpose(geometry_msgs::PoseStamped pose) {
     pose_rpy_last.data[2] = g_pose_last.pose.position.z;
 
     for (int i = 0; i < 6; i++) {
-      delta_pose.data[i] = (pose_rpy.data[i] - pose_rpy_last.data[i]) / dt;
+      if((i > 2) && !g_use_orientation){
+        delta_pose.data[i] = 0;
+      }
+      else{
+        delta_pose.data[i] = (pose_rpy.data[i] - pose_rpy_last.data[i]) / dt;
+      }
     }
   } else {
     delta_pose.data.clear();
@@ -245,6 +251,9 @@ int main(int argc, char **argv) {
 
   double theta_d_limit = 3.14;
   nh_pose_following.getParam("pose_following/theta_d_lim", theta_d_limit);
+
+  nh_pose_following.getParam("pose_following/use_orientation",
+                             g_use_orientation);
 
   double dt_pose_lim = 0.5;
   nh_pose_following.getParam("pose_following/dt_pose_lim", dt_pose_lim);

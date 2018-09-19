@@ -10,6 +10,7 @@
       k0: 0.01
       theta_d_lim: 3.14
       dt_pose_lim: 0.5
+      use_orientation: true
     </rosparam>
   </node>
   <node pkg="manipulator_pose_following" type="moveit_interface"
