@@ -43,7 +43,7 @@ Eigen::MatrixXd sr_inverse(Eigen::MatrixXd J, double w, double w0, double k0) {
 }
 
 void cb_joint_state(sensor_msgs::JointState msg) {
-  ROS_DEBUG_NAMED("stream_dbg", "New joint state...");
+  //ROS_DEBUG_NAMED("stream_dbg", "New joint state...");
   g_current_joints = msg;
 }
 
@@ -55,6 +55,7 @@ bool cb_start_pose_following(
   g_do_pose_following = true;
   g_state = STATE_IDLE;
   ROS_DEBUG_NAMED("state", "STATE_STOP --> STATE_IDLE");
+  ROS_DEBUG_NAMED("event", "Event: received start signal");
   res.reply = 0;
   return 0;
 }
@@ -67,6 +68,7 @@ bool cb_stop_pose_following(
   g_do_pose_following = false;
   g_state = STATE_STOP;
   ROS_DEBUG_NAMED("state", "--> STATE_STOP");
+  ROS_DEBUG_NAMED("event", "Event: received stop signal");
   res.reply = 0;
   return 0;
 }
@@ -76,6 +78,7 @@ void cb_delta_pose_rpy(const geometry_msgs::Twist::ConstPtr &msg) {
   if (g_state == STATE_IDLE) {
     g_state = STATE_POSE_FOLLOW;
     ROS_DEBUG_NAMED("state", "STATE_IDLE --> STATE_POSE_FOLLOW");
+    ROS_DEBUG_NAMED("event", "Event: received msg on topic /cmd_vel");
     g_t_start = ros::Time::now();
   }
 
@@ -169,6 +172,7 @@ void cb_pose_quat(const geometry_msgs::PoseStamped::ConstPtr &msg) {
   if (g_state == STATE_IDLE) {
     g_state = STATE_POSE_FOLLOW;
     ROS_DEBUG_NAMED("state", "STATE_IDLE --> STATE_POSE_FOLLOW");
+    ROS_DEBUG_NAMED("event", "Event: received msg on topic /pose");
     g_t_start = ros::Time::now();
   }
 
@@ -241,6 +245,9 @@ int main(int argc, char **argv) {
 
   double theta_d_limit = 3.14;
   nh_pose_following.getParam("pose_following/theta_d_lim", theta_d_limit);
+
+  double dt_pose_lim = 0.5;
+  nh_pose_following.getParam("pose_following/dt_pose_lim", dt_pose_lim);
 
   // --- Setup MoveIt interface
   moveit::planning_interface::MoveGroupInterface arm(group_st);
@@ -331,13 +338,14 @@ int main(int argc, char **argv) {
     case STATE_POSE_FOLLOW: // POSE_FOLLOW
 
       double dt_cb = (ros::Time::now() - g_t_last_cb).toSec();
-      if (dt_cb > 4 * (1 / (double)rate_hz)) {
+      if (dt_cb > dt_pose_lim) {
         ROS_DEBUG_NAMED("stream_dbg", "dt_cb: %1.3f", dt_cb);
         for (unsigned int i = 0; i < 6; i++) {
           g_delta_pose.data.at(i) = 0.0;
         }
         g_state = STATE_IDLE;
         ROS_DEBUG_NAMED("state", "STATE_POSE_FOLLOW --> STATE_IDLE");
+        ROS_DEBUG_NAMED("event", "Event: dt_cb > dt_pose_lim");
       }
 
       for (int i = 0; i < 6; i++) {
@@ -389,6 +397,7 @@ int main(int argc, char **argv) {
           ROS_WARN("Changing state to STATE_STOP.");
           g_state = STATE_STOP;
           ROS_DEBUG_NAMED("state", "STATE_POSE_FOLLOW --> STATE_STOP");
+          ROS_DEBUG_NAMED("event", "Event: joint velocity exceeding limit");
         }
         point.positions.at(j) = point.positions.at(j) + theta_d[j] * dt;
 
