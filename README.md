@@ -34,6 +34,8 @@ The main node facilitating pose-following.
       Adjustment factor to inverse of Jacobian in proximity of a simgularity (see [Nakamura *et al.*](http://dynamicsystems.asmedigitalcollection.asme.org/article.aspx?articleid=1403812)).  
     - `theta_d_lim` - (`double`, default: 3.14) [rad/s]  
       Joint velocity limit threshold. If exceeded, the node's state changes to idle.  
+    - `dt_pose_lim` - (`double`, default: 0.5) [s]  
+      `if(dt_cb > dt_pose_lim): STATE_POSE_FOLLOW --> STATE_IDLE`: If the most recent `pose` or `cmd_vel` message has been received more than `dt_pose_lim` s ago, transition to state `STATE_IDLE`.  
 
 #### `moveit_interface`:
 Interface node for planning and executing trajectories using MoveIt!, and for moving the manipulator's end-effector to desired poses and pre-definded configurations (e.g., home position) from which to begin pose-following.
